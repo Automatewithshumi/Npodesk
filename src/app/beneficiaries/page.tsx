@@ -1,6 +1,33 @@
 'use client';
-import { useState } from 'react';
-import { BENEFICIARIES, CAREGIVERS, COLOURS, ini } from '@/lib/data';
+import { useState, useEffect, useCallback } from 'react';
+import { supabase } from '@/lib/supabase';
+
+type Beneficiary = {
+  id: string;
+  full_name: string;
+  type: string;
+  area: string;
+  status: string;
+  phone: string;
+  household_size: number;
+  notes: string;
+  registered_at: string;
+  id_number: string;
+};
+
+type Caregiver = {
+  id: string;
+  name: string;
+  area: string;
+};
+
+const COLOURS = [
+  { bg: '#FAECE7', tx: '#712B13' }, { bg: '#E6F1FB', tx: '#0C447C' },
+  { bg: '#E1F5EE', tx: '#085041' }, { bg: '#EEEDFE', tx: '#3C3489' },
+  { bg: '#FAEEDA', tx: '#633806' }, { bg: '#EAF3DE', tx: '#27500A' },
+];
+const ini = (n: string) => n.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+const colourFor = (name: string) => COLOURS[name.charCodeAt(0) % COLOURS.length];
 
 const statusPill = (s: string) => {
   const map: Record<string, string> = { Active: 'pill-green', New: 'pill-blue', Inactive: 'pill-gray' };
@@ -8,233 +35,268 @@ const statusPill = (s: string) => {
 };
 
 export default function BeneficiariesPage() {
-  const [tab, setTab] = useState<'beneficiaries' | 'caregivers'>('beneficiaries');
-  const [selBen, setSelBen] = useState(0);
-  const [selCg, setSelCg] = useState(0);
+  const [beneficiaries, setBeneficiaries] = useState<Beneficiary[]>([]);
+  const [caregivers, setCaregivers] = useState<Caregiver[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [sel, setSel] = useState<Beneficiary | null>(null);
   const [search, setSearch] = useState('');
   const [statusF, setStatusF] = useState('');
   const [typeF, setTypeF] = useState('');
+  const [showForm, setShowForm] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [success, setSuccess] = useState('');
+  const [orgId, setOrgId] = useState('');
 
-  const filteredBens = BENEFICIARIES.filter(b =>
-    (!search || b.name.toLowerCase().includes(search.toLowerCase()) || b.id.toLowerCase().includes(search.toLowerCase()) || b.area.toLowerCase().includes(search.toLowerCase()) || b.cg.toLowerCase().includes(search.toLowerCase())) &&
+  // Form state
+  const [form, setForm] = useState({
+    full_name: '', id_number: '', type: 'Adult', area: '',
+    phone: '', household_size: 1, status: 'New',
+    caregiver_id: '', notes: '', program: 'Hot meals + food parcels'
+  });
+
+  const loadData = useCallback(async (oid: string) => {
+    const [bRes, cRes] = await Promise.all([
+      supabase.from('beneficiaries').select('*').eq('org_id', oid).order('registered_at', { ascending: false }),
+      supabase.from('caregivers').select('*').eq('org_id', oid)
+    ]);
+    if (bRes.data) setBeneficiaries(bRes.data);
+    if (cRes.data) setCaregivers(cRes.data);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(async ({ data }) => {
+      if (!data.session) return;
+      const { data: userData } = await supabase
+        .from('users').select('org_id').eq('id', data.session.user.id).single();
+      if (userData?.org_id) { setOrgId(userData.org_id); loadData(userData.org_id); }
+    });
+  }, [loadData]);
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    const { error } = await supabase.from('beneficiaries').insert({
+      ...form, org_id: orgId,
+      caregiver_id: form.caregiver_id || null,
+    });
+    if (!error) {
+      setSuccess(`✅ ${form.full_name} registered successfully!`);
+      setShowForm(false);
+      setForm({ full_name: '', id_number: '', type: 'Adult', area: '', phone: '', household_size: 1, status: 'New', caregiver_id: '', notes: '', program: 'Hot meals + food parcels' });
+      loadData(orgId);
+      setTimeout(() => setSuccess(''), 4000);
+    }
+    setSaving(false);
+  };
+
+  const exportCSV = () => {
+    const headers = ['Name', 'ID Number', 'Type', 'Area', 'Phone', 'Household Size', 'Status', 'Registered'];
+    const rows = beneficiaries.map(b => [b.full_name, b.id_number || '', b.type, b.area, b.phone, b.household_size, b.status, new Date(b.registered_at).toLocaleDateString()]);
+    const csv = [headers, ...rows].map(r => r.join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'beneficiaries.csv'; a.click();
+  };
+
+  const filtered = beneficiaries.filter(b =>
+    (!search || b.full_name.toLowerCase().includes(search.toLowerCase()) || b.area?.toLowerCase().includes(search.toLowerCase())) &&
     (!statusF || b.status === statusF) && (!typeF || b.type === typeF)
   );
-
-  const ben = BENEFICIARIES[selBen];
-  const cg = CAREGIVERS.find(c => c.id === ben?.cgId) || CAREGIVERS[0];
-  const cgSelected = CAREGIVERS[selCg];
-  const cgBens = BENEFICIARIES.filter(b => b.cgId === cgSelected?.id);
 
   return (
     <>
       <div className="topbar">
         <div>
           <div className="page-title">Beneficiary management</div>
-          <div className="page-sub">Profiles, caregivers & meal history</div>
+          <div className="page-sub">{beneficiaries.length} registered · May 2026</div>
         </div>
-        <div className="flex-gap">
-          <span className="live-badge">● Live</span>
-          <span style={{ fontSize: 12, color: '#888', background: '#fff', border: '0.5px solid rgba(0,0,0,0.1)', borderRadius: 6, padding: '4px 10px' }}>May 2026</span>
-        </div>
+        <span className="live-badge">● Live</span>
       </div>
 
       <div className="metrics-grid">
         {[
-          { label: '👥 Total registered', value: '2,108', delta: '+143 this month', up: true },
-          { label: '✅ Active', value: '1,864', delta: '88% of total', up: true },
-          { label: '🩺 Caregivers', value: '18', delta: '+2 this month', up: true },
-          { label: '⏳ Pending profiles', value: '34', delta: 'Awaiting visit', up: false },
+          { label: '👥 Total registered', value: beneficiaries.length.toString(), delta: 'All time' },
+          { label: '✅ Active', value: beneficiaries.filter(b => b.status === 'Active').length.toString(), delta: 'Currently active' },
+          { label: '🆕 New', value: beneficiaries.filter(b => b.status === 'New').length.toString(), delta: 'Pending activation' },
+          { label: '🩺 Caregivers', value: caregivers.length.toString(), delta: 'Assigned' },
         ].map((m, i) => (
           <div key={i} className="metric-card">
             <div className="metric-label">{m.label}</div>
             <div className="metric-value">{m.value}</div>
-            <div className={`metric-delta ${m.up ? 'delta-up' : 'delta-warn'}`}>{m.delta}</div>
+            <div className="metric-delta delta-up">{m.delta}</div>
           </div>
         ))}
       </div>
 
-      <div className="subtabs">
-        {(['beneficiaries', 'caregivers'] as const).map(t => (
-          <button key={t} className={`subtab ${tab === t ? 'on' : ''}`} onClick={() => setTab(t)}>
-            {t === 'beneficiaries' ? '👥 Beneficiaries' : '🩺 Caregivers'}
+      {success && (
+        <div style={{ background: '#EAF3DE', border: '0.5px solid #b0d890', borderRadius: 8, padding: '10px 16px', marginBottom: 16, fontSize: 13, color: '#27500A', fontWeight: 500 }}>
+          {success}
+        </div>
+      )}
+
+      <div className="flex-between" style={{ marginBottom: 12 }}>
+        <span className="section-title">Beneficiary registry</span>
+        <div className="flex-gap">
+          <button className="btn btn-sm" onClick={exportCSV}>⬇ Export CSV</button>
+          <button className="btn btn-primary btn-sm" onClick={() => setShowForm(!showForm)}>
+            {showForm ? '✕ Cancel' : '+ Register beneficiary'}
           </button>
-        ))}
+        </div>
       </div>
 
-      {tab === 'beneficiaries' && (
-        <>
-          <div className="flex-between" style={{ marginBottom: 12 }}>
-            <span className="section-title">Beneficiary registry</span>
-            <div className="flex-gap">
-              <button className="btn btn-sm">⬇ Export</button>
-              <button className="btn btn-primary btn-sm">+ Register beneficiary</button>
+      {/* Registration Form */}
+      {showForm && (
+        <div className="card" style={{ marginBottom: 16, border: '1.5px solid #D85A30' }}>
+          <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 16, color: '#D85A30' }}>📝 Register new beneficiary</div>
+          <form onSubmit={handleRegister}>
+            <div className="form-row">
+              <div className="form-group"><label className="form-label">Full name *</label><input className="form-input" value={form.full_name} onChange={e => setForm({ ...form, full_name: e.target.value })} placeholder="e.g. Nomsa Dlamini" required /></div>
+              <div className="form-group"><label className="form-label">ID / Passport number</label><input className="form-input" value={form.id_number} onChange={e => setForm({ ...form, id_number: e.target.value })} placeholder="SA ID or passport" /></div>
             </div>
-          </div>
-          <div className="toolbar">
-            <input placeholder="Search name, ID or area..." value={search} onChange={e => setSearch(e.target.value)} />
-            <select value={statusF} onChange={e => setStatusF(e.target.value)}>
-              <option value="">All statuses</option>
-              {['Active','New','Inactive'].map(s => <option key={s}>{s}</option>)}
-            </select>
-            <select value={typeF} onChange={e => setTypeF(e.target.value)}>
-              <option value="">All types</option>
-              {['Adult','Child','Elderly','Disabled'].map(t => <option key={t}>{t}</option>)}
-            </select>
-          </div>
-          <div className="two-col">
-            <div className="table-wrap">
-              <table>
-                <thead><tr>
-                  <th style={{ width: '35%' }}>Name</th>
-                  <th style={{ width: '14%' }}>ID</th>
-                  <th style={{ width: '13%' }}>Type</th>
-                  <th style={{ width: '20%' }}>Caregiver</th>
-                  <th style={{ width: '10%' }}>Area</th>
-                  <th style={{ width: '12%' }}>Status</th>
-                </tr></thead>
-                <tbody>
-                  {filteredBens.map((b) => {
-                    const idx = BENEFICIARIES.indexOf(b);
-                    return (
-                      <tr key={b.id} className={idx === selBen ? 'selected' : ''} onClick={() => setSelBen(idx)}>
-                        <td><div className="name-cell">
-                          <div className="av" style={{ background: COLOURS[b.c].bg, color: COLOURS[b.c].tx }}>{ini(b.name)}</div>
-                          {b.name}
-                        </div></td>
-                        <td style={{ fontSize: 11, color: '#888' }}>{b.id}</td>
-                        <td style={{ fontSize: 12 }}>{b.type}</td>
-                        <td><div className="name-cell">
-                          <div className="av" style={{ background: '#EEEDFE', color: '#3C3489', fontSize: 8 }}>{ini(b.cg)}</div>
-                          <span style={{ fontSize: 11 }}>{b.cg.split(' ')[0]}</span>
-                        </div></td>
-                        <td style={{ fontSize: 11 }}>{b.area}</td>
-                        <td>{statusPill(b.status)}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            {ben && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                <div className="card">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 12, marginBottom: 12, borderBottom: '0.5px solid rgba(0,0,0,0.07)' }}>
-                    <div style={{ width: 42, height: 42, borderRadius: '50%', background: COLOURS[ben.c].bg, color: COLOURS[ben.c].tx, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 500, fontSize: 13 }}>{ini(ben.name)}</div>
-                    <div>
-                      <div style={{ fontWeight: 500, fontSize: 14 }}>{ben.name}</div>
-                      <div style={{ fontSize: 11, color: '#888' }}>{ben.id} · {ben.area}</div>
-                    </div>
-                  </div>
-                  {[['Type', ben.type], ['Household', ben.hh], ['Area', ben.area], ['Contact', ben.phone], ['Registered', ben.reg], ['Status', ben.status]].map(([l, v]) => (
-                    <div key={l} className="d-row"><span className="d-label">{l}</span><span className="d-value">{l === 'Status' ? statusPill(v) : v}</span></div>
-                  ))}
-                  <div style={{ fontSize: 11, color: '#888', margin: '10px 0 4px', fontWeight: 500 }}>Notes</div>
-                  <div style={{ fontSize: 12, color: '#888', lineHeight: 1.5, marginBottom: 12 }}>{ben.notes}</div>
-                  <div className="flex-gap">
-                    <button className="btn btn-sm" style={{ flex: 1, justifyContent: 'center' }}>✏ Edit</button>
-                    <button className="btn btn-sm" style={{ flex: 1, justifyContent: 'center' }}>🖨 Print card</button>
-                  </div>
-                </div>
-                <div className="card">
-                  <div style={{ fontSize: 12, fontWeight: 500, color: '#888', marginBottom: 8 }}>🩺 Assigned caregiver</div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 8, background: '#FAFAF8', border: '0.5px solid rgba(0,0,0,0.07)', cursor: 'pointer', marginBottom: 12 }}
-                    onClick={() => { setTab('caregivers'); setSelCg(CAREGIVERS.findIndex(c => c.id === ben.cgId)); }}>
-                    <div style={{ width: 30, height: 30, borderRadius: '50%', background: '#EEEDFE', color: '#3C3489', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 500 }}>{ini(cg.name)}</div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 12, fontWeight: 500 }}>{cg.name}</div>
-                      <div style={{ fontSize: 11, color: '#888' }}>{cg.id} · {cg.area} · {cg.assigned} beneficiaries</div>
-                    </div>
-                    <span style={{ fontSize: 14, color: '#aaa' }}>›</span>
-                  </div>
-                  <div style={{ fontSize: 11, color: '#888', fontWeight: 500, marginBottom: 8 }}>Meal history</div>
-                  {[['22 May 2026','Hot meal — outreach','green'],['19 May 2026','Food parcel','green'],['15 May 2026','Hot meal — outreach','green'],['12 May 2026','Food parcel','amber']].map(([date,desc,c],i) => (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: i < 3 ? '0.5px solid rgba(0,0,0,0.05)' : 'none', fontSize: 12 }}>
-                      <div style={{ width: 7, height: 7, borderRadius: '50%', background: c === 'green' ? '#1D9E75' : '#BA7517', flexShrink: 0 }} />
-                      <span style={{ minWidth: 80, fontSize: 11, color: '#aaa' }}>{date}</span>
-                      <span style={{ flex: 1 }}>{desc}</span>
-                      <span className={`pill ${c === 'green' ? 'pill-green' : 'pill-amber'}`}>{c === 'green' ? 'Collected' : 'Missed'}</span>
-                    </div>
-                  ))}
-                </div>
+            <div className="form-row">
+              <div className="form-group"><label className="form-label">Type *</label>
+                <select className="form-input" value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}>
+                  {['Adult', 'Child', 'Elderly', 'Disabled'].map(t => <option key={t}>{t}</option>)}
+                </select>
               </div>
-            )}
-          </div>
-        </>
+              <div className="form-group"><label className="form-label">Household size</label><input className="form-input" type="number" min={1} value={form.household_size} onChange={e => setForm({ ...form, household_size: parseInt(e.target.value) })} /></div>
+            </div>
+            <div className="form-row">
+              <div className="form-group"><label className="form-label">Area / Township *</label>
+                <select className="form-input" value={form.area} onChange={e => setForm({ ...form, area: e.target.value })} required>
+                  <option value="">Select area</option>
+                  {['Soweto', 'Alexandra', 'Diepsloot', 'Orange Farm', 'Tembisa', 'Sandton', 'Other'].map(a => <option key={a}>{a}</option>)}
+                </select>
+              </div>
+              <div className="form-group"><label className="form-label">Contact number</label><input className="form-input" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} placeholder="07x xxx xxxx" /></div>
+            </div>
+            <div className="form-row">
+              <div className="form-group"><label className="form-label">Assign caregiver</label>
+                <select className="form-input" value={form.caregiver_id} onChange={e => setForm({ ...form, caregiver_id: e.target.value })}>
+                  <option value="">No caregiver yet</option>
+                  {caregivers.map(c => <option key={c.id} value={c.id}>{c.name} — {c.area}</option>)}
+                </select>
+              </div>
+              <div className="form-group"><label className="form-label">Program enrollment</label>
+                <select className="form-input" value={form.program} onChange={e => setForm({ ...form, program: e.target.value })}>
+                  {['Hot meals only', 'Food parcels only', 'Hot meals + food parcels', 'School feeding', 'Elderly care'].map(p => <option key={p}>{p}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="form-group"><label className="form-label">Notes / special needs</label><textarea className="form-input" rows={2} value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} placeholder="Dietary requirements, medical needs, household notes..." /></div>
+            <div className="flex-gap" style={{ marginTop: 8 }}>
+              <button type="button" className="btn" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setShowForm(false)}>Cancel</button>
+              <button type="submit" className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }} disabled={saving}>
+                {saving ? '⏳ Saving...' : '💾 Save & register'}
+              </button>
+            </div>
+          </form>
+        </div>
       )}
 
-      {tab === 'caregivers' && (
-        <>
-          <div className="flex-between" style={{ marginBottom: 12 }}>
-            <span className="section-title">Caregiver directory</span>
-            <button className="btn btn-primary btn-sm">+ Add caregiver</button>
-          </div>
-          <div className="two-col">
-            <div className="table-wrap">
-              <table>
-                <thead><tr>
-                  <th style={{ width: '30%' }}>Name</th>
-                  <th style={{ width: '14%' }}>CG ID</th>
-                  <th style={{ width: '18%' }}>Area</th>
-                  <th style={{ width: '14%' }}>Assigned</th>
-                  <th style={{ width: '14%' }}>Profiles</th>
-                  <th style={{ width: '12%' }}>Pending</th>
-                </tr></thead>
-                <tbody>
-                  {CAREGIVERS.map((c, i) => (
-                    <tr key={c.id} className={i === selCg ? 'selected' : ''} onClick={() => setSelCg(i)}>
-                      <td><div className="name-cell"><div className="av" style={{ background: '#EEEDFE', color: '#3C3489' }}>{ini(c.name)}</div>{c.name}</div></td>
-                      <td style={{ fontSize: 11, color: '#888' }}>{c.id}</td>
-                      <td style={{ fontSize: 12 }}>{c.area}</td>
-                      <td style={{ fontWeight: 500 }}>{c.assigned}</td>
-                      <td><span className={`pill ${c.profiles === c.assigned ? 'pill-green' : 'pill-amber'}`}>{c.profiles}/{c.assigned}</span></td>
-                      <td><span className={`pill ${c.pending > 0 ? 'pill-amber' : 'pill-green'}`}>{c.pending}</span></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+      <div className="toolbar">
+        <input placeholder="Search name or area..." value={search} onChange={e => setSearch(e.target.value)} />
+        <select value={statusF} onChange={e => setStatusF(e.target.value)}>
+          <option value="">All statuses</option>
+          {['Active', 'New', 'Inactive'].map(s => <option key={s}>{s}</option>)}
+        </select>
+        <select value={typeF} onChange={e => setTypeF(e.target.value)}>
+          <option value="">All types</option>
+          {['Adult', 'Child', 'Elderly', 'Disabled'].map(t => <option key={t}>{t}</option>)}
+        </select>
+      </div>
+
+      <div className="two-col">
+        <div className="table-wrap">
+          {loading ? (
+            <div style={{ padding: '2rem', textAlign: 'center', color: '#888' }}>Loading beneficiaries...</div>
+          ) : filtered.length === 0 ? (
+            <div style={{ padding: '2rem', textAlign: 'center', color: '#888' }}>
+              {beneficiaries.length === 0 ? '👥 No beneficiaries yet — register your first one above!' : 'No results found'}
             </div>
-            {cgSelected && (
-              <div className="card">
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 12, marginBottom: 12, borderBottom: '0.5px solid rgba(0,0,0,0.07)' }}>
-                  <div style={{ width: 42, height: 42, borderRadius: '50%', background: '#EEEDFE', color: '#3C3489', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 500, fontSize: 13 }}>{ini(cgSelected.name)}</div>
-                  <div>
-                    <div style={{ fontWeight: 500, fontSize: 14 }}>{cgSelected.name}</div>
-                    <div style={{ fontSize: 11, color: '#888' }}>{cgSelected.id} · Caregiver · {cgSelected.area}</div>
-                  </div>
-                </div>
-                <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-                  {[['Assigned', cgSelected.assigned], ['Profiles', cgSelected.profiles], ['Pending', cgSelected.pending]].map(([l, v]) => (
-                    <div key={l} style={{ flex: 1, background: '#FAFAF8', borderRadius: 8, padding: '8px 10px', textAlign: 'center' }}>
-                      <div style={{ fontSize: 18, fontWeight: 500, color: l === 'Pending' && Number(v) > 0 ? '#BA7517' : '#1a1a1a' }}>{v}</div>
-                      <div style={{ fontSize: 10, color: '#aaa', marginTop: 2 }}>{l}</div>
-                    </div>
-                  ))}
-                </div>
-                {[['Area', cgSelected.area], ['Contact', cgSelected.phone], ['Since', cgSelected.since]].map(([l, v]) => (
-                  <div key={l} className="d-row"><span className="d-label">{l}</span><span className="d-value">{v}</span></div>
+          ) : (
+            <table>
+              <thead><tr>
+                <th style={{ width: '35%' }}>Name</th>
+                <th style={{ width: '13%' }}>Type</th>
+                <th style={{ width: '18%' }}>Area</th>
+                <th style={{ width: '18%' }}>Registered</th>
+                <th style={{ width: '16%' }}>Status</th>
+              </tr></thead>
+              <tbody>
+                {filtered.map(b => (
+                  <tr key={b.id} className={sel?.id === b.id ? 'selected' : ''} onClick={() => setSel(b)}>
+                    <td><div className="name-cell"><div className="av" style={{ background: colourFor(b.full_name).bg, color: colourFor(b.full_name).tx }}>{ini(b.full_name)}</div>{b.full_name}</div></td>
+                    <td style={{ fontSize: 12 }}>{b.type}</td>
+                    <td style={{ fontSize: 12 }}>{b.area}</td>
+                    <td style={{ fontSize: 11, color: '#888' }}>{new Date(b.registered_at).toLocaleDateString('en-ZA')}</td>
+                    <td>{statusPill(b.status)}</td>
+                  </tr>
                 ))}
-                <div style={{ fontSize: 11, color: '#888', margin: '10px 0 4px', fontWeight: 500 }}>Notes</div>
-                <div style={{ fontSize: 12, color: '#888', lineHeight: 1.5, marginBottom: 12 }}>{cgSelected.notes}</div>
-                <div style={{ fontSize: 11, color: '#888', fontWeight: 500, marginBottom: 8 }}>Assigned beneficiaries ({cgBens.length})</div>
-                {cgBens.map(b => (
-                  <div key={b.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderBottom: '0.5px solid rgba(0,0,0,0.05)' }}>
-                    <div className="av" style={{ background: COLOURS[b.c].bg, color: COLOURS[b.c].tx }}>{ini(b.name)}</div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 12 }}>{b.name}</div>
-                      <div style={{ fontSize: 11, color: '#aaa' }}>{b.id} · {b.type}</div>
-                    </div>
-                    {statusPill(b.status)}
-                  </div>
-                ))}
-                <div className="flex-gap" style={{ marginTop: 12 }}>
-                  <button className="btn btn-sm" style={{ flex: 1, justifyContent: 'center' }}>✏ Edit</button>
-                  <button className="btn btn-sm" style={{ flex: 1, justifyContent: 'center' }}>🔄 Reassign</button>
-                </div>
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {sel ? (
+          <div className="card">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 12, marginBottom: 12, borderBottom: '0.5px solid rgba(0,0,0,0.07)' }}>
+              <div style={{ width: 42, height: 42, borderRadius: '50%', background: colourFor(sel.full_name).bg, color: colourFor(sel.full_name).tx, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 500, fontSize: 13 }}>{ini(sel.full_name)}</div>
+              <div>
+                <div style={{ fontWeight: 500, fontSize: 14 }}>{sel.full_name}</div>
+                <div style={{ fontSize: 11, color: '#888' }}>{sel.area}</div>
               </div>
-            )}
+            </div>
+            {[
+              ['Type', sel.type],
+              ['Household', `${sel.household_size} members`],
+              ['Area', sel.area],
+              ['Contact', sel.phone || '—'],
+              ['ID Number', sel.id_number || '—'],
+              ['Registered', new Date(sel.registered_at).toLocaleDateString('en-ZA')],
+              ['Status', sel.status],
+            ].map(([l, v]) => (
+              <div key={l} className="d-row">
+                <span className="d-label">{l}</span>
+                <span className="d-value">{l === 'Status' ? statusPill(v) : v}</span>
+              </div>
+            ))}
+            {sel.notes && <>
+              <div style={{ fontSize: 11, color: '#888', margin: '10px 0 4px', fontWeight: 500 }}>Notes</div>
+              <div style={{ fontSize: 12, color: '#888', lineHeight: 1.5 }}>{sel.notes}</div>
+            </>}
+            <div className="flex-gap" style={{ marginTop: 14 }}>
+              <button className="btn btn-sm" style={{ flex: 1, justifyContent: 'center' }}
+                onClick={async () => {
+                  const newStatus = sel.status === 'Active' ? 'Inactive' : 'Active';
+                  await supabase.from('beneficiaries').update({ status: newStatus }).eq('id', sel.id);
+                  setSel({ ...sel, status: newStatus });
+                  loadData(orgId);
+                }}>
+                🔄 Toggle status
+              </button>
+              <button className="btn btn-sm" style={{ flex: 1, justifyContent: 'center' }}
+                onClick={async () => {
+                  if (confirm(`Remove ${sel.full_name}?`)) {
+                    await supabase.from('beneficiaries').delete().eq('id', sel.id);
+                    setSel(null); loadData(orgId);
+                  }
+                }}>
+                🗑 Remove
+              </button>
+            </div>
           </div>
-        </>
-      )}
+        ) : (
+          <div className="card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 200 }}>
+            <div style={{ textAlign: 'center', color: '#aaa' }}>
+              <div style={{ fontSize: 32, marginBottom: 8 }}>👆</div>
+              <div style={{ fontSize: 13 }}>Click a beneficiary to view their profile</div>
+            </div>
+          </div>
+        )}
+      </div>
     </>
   );
 }

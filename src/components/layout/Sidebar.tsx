@@ -1,6 +1,7 @@
 'use client';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
 
 const navItems = [
   { href: '/dashboard', label: 'Overview', icon: '📊' },
@@ -13,6 +14,13 @@ const navItems = [
 
 export default function Sidebar() {
   const path = usePathname();
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push('/login');
+  };
+
   return (
     <aside className="sidebar">
       {/* NpoDesk Brand */}
@@ -36,11 +44,7 @@ export default function Sidebar() {
 
       <div className="nav-section">Main menu</div>
       {navItems.map(item => (
-        <Link
-          key={item.href}
-          href={item.href}
-          className={`nav-item ${path.startsWith(item.href) ? 'active' : ''}`}
-        >
+        <Link key={item.href} href={item.href} className={`nav-item ${path.startsWith(item.href) ? 'active' : ''}`}>
           <span>{item.icon}</span>
           <span>{item.label}</span>
         </Link>
@@ -52,13 +56,20 @@ export default function Sidebar() {
           <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.25)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6 }}>Logged in as</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
             <div style={{ width: 30, height: 30, borderRadius: '50%', background: '#FAEEDA', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 600, color: '#633806', flexShrink: 0 }}>RC</div>
-            <div>
+            <div style={{ flex: 1 }}>
               <div style={{ fontSize: 12, fontWeight: 500, color: 'rgba(255,255,255,0.85)' }}>Rachel</div>
               <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)' }}>Admin · Passionate FS</div>
             </div>
+            <button
+              onClick={handleLogout}
+              style={{ background: 'rgba(255,255,255,0.08)', border: 'none', borderRadius: 6, padding: '4px 8px', fontSize: 10, color: 'rgba(255,255,255,0.4)', cursor: 'pointer' }}
+              title="Sign out"
+            >
+              Exit
+            </button>
           </div>
         </div>
-        <div style={{ borderTop: '0.5px solid rgba(255,255,255,0.08)', paddingTop: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ borderTop: '0.5px solid rgba(255,255,255,0.08)', paddingTop: 10, display: 'flex', justifyContent: 'space-between' }}>
           <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)' }}>Powered by NpoDesk</span>
           <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.25)' }}>v1.0</span>
         </div>
