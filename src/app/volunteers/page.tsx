@@ -1,36 +1,104 @@
 'use client';
-import { useState } from 'react';
-import { VOLUNTEERS, COLOURS, ini } from '@/lib/data';
+import { useState, useEffect, useCallback } from 'react';
+import { supabase } from '@/lib/supabase';
 
-const shifts = [
-  { vol: 'Nomsa Mokoena', prog: 'Hot meals', day: 'Mon', time: '07:00–12:00', status: 'Confirmed', c: 0 },
-  { vol: 'Thabo Nkosi', prog: 'Delivery', day: 'Mon', time: '09:00–14:00', status: 'Confirmed', c: 1 },
-  { vol: 'Zanele Dlamini', prog: 'School feeding', day: 'Tue', time: '06:30–10:00', status: 'Confirmed', c: 2 },
-  { vol: 'Kagiso Sithole', prog: 'Food packing', day: 'Wed', time: '08:00–13:00', status: 'Confirmed', c: 3 },
-  { vol: 'Lerato Pietersen', prog: 'Registration', day: 'Wed', time: '09:00–12:00', status: 'Confirmed', c: 4 },
-  { vol: 'Busi Khumalo', prog: 'Hot meals', day: 'Thu', time: '07:00–12:00', status: 'Unfilled', c: 0 },
-  { vol: 'Sipho Radebe', prog: 'Delivery', day: 'Fri', time: '10:00–15:00', status: 'Confirmed', c: 5 },
-  { vol: 'Nomsa Mokoena', prog: 'Hot meals', day: 'Sat', time: '07:00–13:00', status: 'Confirmed', c: 0 },
-  { vol: 'Thabo Nkosi', prog: 'Elderly meals', day: 'Sat', time: '09:00–14:00', status: 'Confirmed', c: 1 },
-  { vol: 'Ayanda Buthelezi', prog: 'Food packing', day: 'Sun', time: '08:00–11:00', status: 'Unfilled', c: 1 },
+type Volunteer = { id: string; full_name: string; role: string; area: string; phone: string; status: string; joined_at: string; };
+type Shift = { id: string; volunteer_id: string; program: string; shift_date: string; start_time: string; end_time: string; hours: number; status: string; };
+
+const COLOURS = [
+  { bg: '#FAECE7', tx: '#712B13' }, { bg: '#E6F1FB', tx: '#0C447C' },
+  { bg: '#E1F5EE', tx: '#085041' }, { bg: '#EEEDFE', tx: '#3C3489' },
+  { bg: '#FAEEDA', tx: '#633806' }, { bg: '#EAF3DE', tx: '#27500A' },
 ];
+const ini = (n: string) => n.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+const colourFor = (name: string) => COLOURS[name.charCodeAt(0) % COLOURS.length];
 
-const unfilled = [
-  { shift: 'Hot meals — Thu 07:00', loc: 'Soweto North site' },
-  { shift: 'Food packing — Sun 08:00', loc: 'Warehouse, Diepsloot' },
-  { shift: 'Delivery run — Fri 14:00', loc: 'Alexandra zone 2' },
-  { shift: 'Registration — Sat 09:00', loc: 'Orange Farm' },
-  { shift: 'Elderly meals — Wed 11:00', loc: 'Tembisa' },
-];
-
-const days = [{ d: 'Mon', h: 42 }, { d: 'Tue', h: 38 }, { d: 'Wed', h: 51 }, { d: 'Thu', h: 29 }, { d: 'Fri', h: 44 }, { d: 'Sat', h: 62 }, { d: 'Sun', h: 18 }];
+const Toast = ({ msg, type }: { msg: string; type: 'success' | 'error' }) => (
+  <div style={{ position: 'fixed', top: 24, right: 24, zIndex: 9999, background: type === 'success' ? '#EAF3DE' : '#FCEBEB', border: `0.5px solid ${type === 'success' ? '#b0d890' : '#f0b0b0'}`, borderRadius: 10, padding: '12px 20px', fontSize: 13, fontWeight: 500, color: type === 'success' ? '#27500A' : '#791F1F', boxShadow: '0 4px 20px rgba(0,0,0,0.12)' }}>
+    {type === 'success' ? '✅' : '❌'} {msg}
+  </div>
+);
 
 export default function VolunteersPage() {
+  const [volunteers, setVolunteers] = useState<Volunteer[]>([]);
+  const [shifts, setShifts] = useState<Shift[]>([]);
+  const [sel, setSel] = useState<Volunteer | null>(null);
+  const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<'roster' | 'schedule'>('roster');
-  const [sel, setSel] = useState(0);
+  const [showVolForm, setShowVolForm] = useState(false);
+  const [showShiftForm, setShowShiftForm] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
+  const [orgId, setOrgId] = useState('');
   const [search, setSearch] = useState('');
   const [roleF, setRoleF] = useState('');
   const [statusF, setStatusF] = useState('');
+
+  const [volForm, setVolForm] = useState({ full_name: '', role: 'Meal coordinator', area: 'Soweto', phone: '', status: 'Active' });
+  const [shiftForm, setShiftForm] = useState({ volunteer_id: '', program: 'Hot meals', shift_date: new Date().toISOString().split('T')[0], start_time: '07:00', end_time: '12:00', hours: 5, status: 'Confirmed' });
+
+  const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
+    setToast({ msg, type }); setTimeout(() => setToast(null), 4000);
+  };
+
+  const loadData = useCallback(async (oid: string) => {
+    setLoading(true);
+    const [vRes, sRes] = await Promise.all([
+      supabase.from('volunteers').select('*').eq('org_id', oid).order('joined_at', { ascending: false }),
+      supabase.from('shifts').select('*').eq('org_id', oid).order('shift_date', { ascending: false })
+    ]);
+    if (vRes.data) setVolunteers(vRes.data);
+    if (sRes.data) setShifts(sRes.data);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(async ({ data }) => {
+      if (!data.session) return;
+      const { data: userData } = await supabase.from('users').select('org_id').eq('id', data.session.user.id).single();
+      if (userData?.org_id) { setOrgId(userData.org_id); loadData(userData.org_id); }
+      else setLoading(false);
+    });
+  }, [loadData]);
+
+  const totalHours = (volId: string) => shifts.filter(s => s.volunteer_id === volId).reduce((sum, s) => sum + (s.hours || 0), 0);
+  const totalShifts = (volId: string) => shifts.filter(s => s.volunteer_id === volId).length;
+
+  const handleAddVolunteer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!volForm.full_name.trim()) { showToast('Please enter a full name', 'error'); return; }
+    setSaving(true);
+    const { error } = await supabase.from('volunteers').insert({ ...volForm, org_id: orgId });
+    if (error) { showToast(`Failed: ${error.message}`, 'error'); }
+    else { showToast(`${volForm.full_name} added as volunteer!`); setShowVolForm(false); setVolForm({ full_name: '', role: 'Meal coordinator', area: 'Soweto', phone: '', status: 'Active' }); loadData(orgId); }
+    setSaving(false);
+  };
+
+  const handleAddShift = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!shiftForm.volunteer_id) { showToast('Please select a volunteer', 'error'); return; }
+    setSaving(true);
+    const { error } = await supabase.from('shifts').insert({ ...shiftForm, org_id: orgId, volunteer_id: shiftForm.volunteer_id });
+    if (error) { showToast(`Failed: ${error.message}`, 'error'); }
+    else { showToast('Shift added successfully!'); setShowShiftForm(false); loadData(orgId); }
+    setSaving(false);
+  };
+
+  const exportCSV = () => {
+    if (volunteers.length === 0) { showToast('No volunteers to export yet', 'error'); return; }
+    const headers = ['Full Name', 'Role', 'Area', 'Phone', 'Status', 'Total Hours', 'Total Shifts', 'Joined Date'];
+    const rows = volunteers.map(v => [
+      `"${v.full_name}"`, `"${v.role}"`, `"${v.area}"`, `"${v.phone || ''}"`,
+      `"${v.status}"`, totalHours(v.id), totalShifts(v.id),
+      `"${new Date(v.joined_at).toLocaleDateString('en-ZA')}"`
+    ]);
+    const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = `volunteers_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    showToast(`Exported ${volunteers.length} volunteers`);
+  };
 
   const sPill = (s: string) => {
     if (s === 'Active') return <span className="pill pill-green">Active</span>;
@@ -38,33 +106,30 @@ export default function VolunteersPage() {
     return <span className="pill pill-gray">On leave</span>;
   };
 
-  const filtered = VOLUNTEERS.filter(v =>
-    (!search || v.name.toLowerCase().includes(search.toLowerCase()) || v.role.toLowerCase().includes(search.toLowerCase())) &&
+  const filtered = volunteers.filter(v =>
+    (!search || v.full_name.toLowerCase().includes(search.toLowerCase()) || v.role.toLowerCase().includes(search.toLowerCase())) &&
     (!roleF || v.role === roleF) && (!statusF || v.status === statusF)
   );
-  const vol = VOLUNTEERS[sel];
 
   return (
     <>
+      {toast && <Toast msg={toast.msg} type={toast.type} />}
       <div className="topbar">
-        <div>
-          <div className="page-title">Volunteer management</div>
-          <div className="page-sub">Roster, shifts & hours tracking</div>
-        </div>
+        <div><div className="page-title">Volunteer management</div><div className="page-sub">Roster, shifts & hours tracking</div></div>
         <span className="live-badge">● Live</span>
       </div>
 
       <div className="metrics-grid">
         {[
-          { label: '🤝 Total volunteers', value: '64', delta: '+7 this month', up: true },
-          { label: '🕐 Hours logged (May)', value: '1,284', delta: '+18% vs April', up: true },
-          { label: '📅 Shifts this week', value: '38', delta: 'Across 6 programs', up: true },
-          { label: '⚠️ Unfilled shifts', value: '5', delta: 'Need cover urgently', up: false },
+          { label: '🤝 Total volunteers', value: volunteers.length.toString(), delta: 'All time' },
+          { label: '🕐 Total hours', value: shifts.reduce((s, sh) => s + (sh.hours || 0), 0).toString(), delta: 'All recorded shifts' },
+          { label: '📅 Total shifts', value: shifts.length.toString(), delta: 'All time' },
+          { label: '⚠️ Unfilled', value: shifts.filter(s => s.status === 'Unfilled').length.toString(), delta: 'Need cover' },
         ].map((m, i) => (
           <div key={i} className="metric-card">
             <div className="metric-label">{m.label}</div>
             <div className="metric-value">{m.value}</div>
-            <div className={`metric-delta ${m.up ? 'delta-up' : 'delta-warn'}`}>{m.delta}</div>
+            <div className="metric-delta delta-up">{m.delta}</div>
           </div>
         ))}
       </div>
@@ -72,7 +137,7 @@ export default function VolunteersPage() {
       <div className="subtabs">
         {(['roster', 'schedule'] as const).map(t => (
           <button key={t} className={`subtab ${tab === t ? 'on' : ''}`} onClick={() => setTab(t)}>
-            {t === 'roster' ? '📋 Roster' : '📅 Weekly schedule'}
+            {t === 'roster' ? '📋 Roster' : '📅 Schedule'}
           </button>
         ))}
       </div>
@@ -82,77 +147,102 @@ export default function VolunteersPage() {
           <div className="flex-between" style={{ marginBottom: 12 }}>
             <span className="section-title">Volunteer roster</span>
             <div className="flex-gap">
-              <button className="btn btn-sm">⬇ Export</button>
-              <button className="btn btn-primary btn-sm">+ Add volunteer</button>
+              <button className="btn btn-sm" onClick={exportCSV}>⬇ Export CSV</button>
+              <button className="btn btn-primary btn-sm" onClick={() => setShowVolForm(!showVolForm)}>
+                {showVolForm ? '✕ Cancel' : '+ Add volunteer'}
+              </button>
             </div>
           </div>
+
+          {showVolForm && (
+            <div className="card" style={{ marginBottom: 16, border: '1.5px solid #D85A30' }}>
+              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 14, color: '#D85A30' }}>🤝 Add new volunteer</div>
+              <form onSubmit={handleAddVolunteer}>
+                <div className="form-row">
+                  <div className="form-group"><label className="form-label">Full name *</label><input className="form-input" value={volForm.full_name} onChange={e => setVolForm({ ...volForm, full_name: e.target.value })} placeholder="e.g. Thabo Nkosi" required /></div>
+                  <div className="form-group"><label className="form-label">Role</label>
+                    <select className="form-input" value={volForm.role} onChange={e => setVolForm({ ...volForm, role: e.target.value })}>
+                      {['Meal coordinator', 'Delivery driver', 'Food packer', 'School liaison', 'Registration', 'Admin', 'Other'].map(r => <option key={r}>{r}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div className="form-row">
+                  <div className="form-group"><label className="form-label">Area</label>
+                    <select className="form-input" value={volForm.area} onChange={e => setVolForm({ ...volForm, area: e.target.value })}>
+                      {['Soweto', 'Alexandra', 'Diepsloot', 'Orange Farm', 'Tembisa', 'Sandton', 'Other'].map(a => <option key={a}>{a}</option>)}
+                    </select>
+                  </div>
+                  <div className="form-group"><label className="form-label">Phone</label><input className="form-input" value={volForm.phone} onChange={e => setVolForm({ ...volForm, phone: e.target.value })} placeholder="07x xxx xxxx" /></div>
+                </div>
+                <div className="form-group"><label className="form-label">Status</label>
+                  <select className="form-input" value={volForm.status} onChange={e => setVolForm({ ...volForm, status: e.target.value })}>
+                    {['Active', 'New', 'On leave'].map(s => <option key={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div className="flex-gap" style={{ marginTop: 8 }}>
+                  <button type="button" className="btn" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setShowVolForm(false)}>Cancel</button>
+                  <button type="submit" className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }} disabled={saving}>{saving ? '⏳ Saving...' : '💾 Add volunteer'}</button>
+                </div>
+              </form>
+            </div>
+          )}
+
           <div className="toolbar">
             <input placeholder="Search name or role..." value={search} onChange={e => setSearch(e.target.value)} />
             <select value={roleF} onChange={e => setRoleF(e.target.value)}>
               <option value="">All roles</option>
-              {['Meal coordinator','Delivery driver','Food packer','School liaison','Registration','Admin'].map(r => <option key={r}>{r}</option>)}
+              {['Meal coordinator', 'Delivery driver', 'Food packer', 'School liaison', 'Registration', 'Admin'].map(r => <option key={r}>{r}</option>)}
             </select>
             <select value={statusF} onChange={e => setStatusF(e.target.value)}>
               <option value="">All statuses</option>
-              {['Active','New','On leave'].map(s => <option key={s}>{s}</option>)}
+              {['Active', 'New', 'On leave'].map(s => <option key={s}>{s}</option>)}
             </select>
           </div>
+
           <div className="two-col">
             <div className="table-wrap">
-              <table>
-                <thead><tr>
-                  <th style={{ width: '30%' }}>Name</th>
-                  <th style={{ width: '22%' }}>Role</th>
-                  <th style={{ width: '14%' }}>Area</th>
-                  <th style={{ width: '14%' }}>Hrs (May)</th>
-                  <th style={{ width: '10%' }}>Shifts</th>
-                  <th style={{ width: '12%' }}>Status</th>
-                </tr></thead>
-                <tbody>
-                  {filtered.map(v => {
-                    const idx = VOLUNTEERS.indexOf(v);
-                    return (
-                      <tr key={v.name} className={idx === sel ? 'selected' : ''} onClick={() => setSel(idx)}>
-                        <td><div className="name-cell"><div className="av" style={{ background: COLOURS[v.c].bg, color: COLOURS[v.c].tx }}>{ini(v.name)}</div>{v.name}</div></td>
-                        <td style={{ fontSize: 12 }}>{v.role}</td>
-                        <td style={{ fontSize: 12 }}>{v.area}</td>
-                        <td style={{ fontWeight: 500, color: '#D85A30' }}>{v.hrs}h</td>
-                        <td style={{ fontSize: 12 }}>{v.shifts}</td>
-                        <td>{sPill(v.status)}</td>
+              {loading ? <div style={{ padding: '2rem', textAlign: 'center', color: '#888' }}>⏳ Loading volunteers...</div>
+                : filtered.length === 0 ? <div style={{ padding: '2rem', textAlign: 'center', color: '#888' }}>{volunteers.length === 0 ? '🤝 No volunteers yet — add your first one above!' : 'No results found'}</div>
+                : <table>
+                  <thead><tr>
+                    <th style={{ width: '30%' }}>Name</th><th style={{ width: '22%' }}>Role</th>
+                    <th style={{ width: '14%' }}>Area</th><th style={{ width: '12%' }}>Hours</th>
+                    <th style={{ width: '10%' }}>Shifts</th><th style={{ width: '12%' }}>Status</th>
+                  </tr></thead>
+                  <tbody>
+                    {filtered.map(v => (
+                      <tr key={v.id} className={sel?.id === v.id ? 'selected' : ''} onClick={() => setSel(v)}>
+                        <td><div className="name-cell"><div className="av" style={{ background: colourFor(v.full_name).bg, color: colourFor(v.full_name).tx }}>{ini(v.full_name)}</div>{v.full_name}</div></td>
+                        <td style={{ fontSize: 12 }}>{v.role}</td><td style={{ fontSize: 12 }}>{v.area}</td>
+                        <td style={{ fontWeight: 500, color: '#D85A30' }}>{totalHours(v.id)}h</td>
+                        <td style={{ fontSize: 12 }}>{totalShifts(v.id)}</td><td>{sPill(v.status)}</td>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                    ))}
+                  </tbody>
+                </table>}
             </div>
-            {vol && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                <div className="card">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 12, marginBottom: 12, borderBottom: '0.5px solid rgba(0,0,0,0.07)' }}>
-                    <div style={{ width: 42, height: 42, borderRadius: '50%', background: COLOURS[vol.c].bg, color: COLOURS[vol.c].tx, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 500, fontSize: 13 }}>{ini(vol.name)}</div>
-                    <div><div style={{ fontWeight: 500, fontSize: 14 }}>{vol.name}</div><div style={{ fontSize: 11, color: '#888' }}>{vol.role} · {vol.area}</div></div>
-                  </div>
-                  {[['Role', vol.role], ['Hours (May)', `${vol.hrs}h logged`], ['Shifts (May)', `${vol.shifts} shifts`], ['Area', vol.area], ['Contact', vol.phone], ['Joined', vol.since]].map(([l, v2]) => (
-                    <div key={l} className="d-row"><span className="d-label">{l}</span><span className="d-value" style={l === 'Hours (May)' ? { color: '#D85A30' } : {}}>{v2}</span></div>
-                  ))}
-                  <div style={{ fontSize: 11, color: '#888', margin: '10px 0 4px', fontWeight: 500 }}>Notes</div>
-                  <div style={{ fontSize: 12, color: '#888', lineHeight: 1.5, marginBottom: 12 }}>{vol.notes}</div>
-                  <div className="flex-gap">
-                    <button className="btn btn-sm" style={{ flex: 1, justifyContent: 'center' }}>✏ Edit</button>
-                    <button className="btn btn-sm" style={{ flex: 1, justifyContent: 'center' }}>🕐 Log hours</button>
-                  </div>
+            {sel ? (
+              <div className="card">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, paddingBottom: 12, marginBottom: 12, borderBottom: '0.5px solid rgba(0,0,0,0.07)' }}>
+                  <div style={{ width: 42, height: 42, borderRadius: '50%', background: colourFor(sel.full_name).bg, color: colourFor(sel.full_name).tx, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 500, fontSize: 13 }}>{ini(sel.full_name)}</div>
+                  <div><div style={{ fontWeight: 500, fontSize: 14 }}>{sel.full_name}</div><div style={{ fontSize: 11, color: '#888' }}>{sel.role} · {sel.area}</div></div>
                 </div>
-                <div className="card">
-                  <div style={{ fontSize: 12, fontWeight: 500, color: '#888', marginBottom: 10 }}>Recent shifts</div>
-                  {[['22 May','Hot meals — morning','#D85A30','green'],['20 May','Food packing','#1D9E75','green'],['17 May','Hot meals — morning','#D85A30','green'],['14 May','Registration intake','#BA7517','amber']].map(([d,t,c,s],i) => (
-                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: i < 3 ? '0.5px solid rgba(0,0,0,0.05)' : 'none', fontSize: 12 }}>
-                      <div style={{ width: 7, height: 7, borderRadius: '50%', background: c, flexShrink: 0 }} />
-                      <span style={{ minWidth: 60, fontSize: 11, color: '#aaa' }}>{d}</span>
-                      <span style={{ flex: 1 }}>{t}</span>
-                      <span className={`pill ${s === 'green' ? 'pill-green' : 'pill-amber'}`}>{s === 'green' ? 'Done' : 'Partial'}</span>
-                    </div>
-                  ))}
+                {[['Role', sel.role], ['Area', sel.area], ['Phone', sel.phone || '—'], ['Hours', `${totalHours(sel.id)}h`], ['Shifts', totalShifts(sel.id).toString()], ['Joined', new Date(sel.joined_at).toLocaleDateString('en-ZA')]].map(([l, v]) => (
+                  <div key={l} className="d-row"><span className="d-label">{l}</span><span className="d-value" style={l === 'Hours' ? { color: '#D85A30' } : {}}>{v}</span></div>
+                ))}
+                <div className="flex-gap" style={{ marginTop: 14 }}>
+                  <button className="btn btn-sm" style={{ flex: 1, justifyContent: 'center' }} onClick={() => { setShiftForm({ ...shiftForm, volunteer_id: sel.id }); setTab('schedule'); setShowShiftForm(true); }}>📅 Add shift</button>
+                  <button className="btn btn-sm" style={{ flex: 1, justifyContent: 'center', color: '#791F1F' }} onClick={async () => {
+                    if (confirm(`Remove ${sel.full_name}?`)) {
+                      await supabase.from('volunteers').delete().eq('id', sel.id);
+                      setSel(null); loadData(orgId); showToast(`${sel.full_name} removed`);
+                    }
+                  }}>🗑 Remove</button>
                 </div>
+              </div>
+            ) : (
+              <div className="card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 200 }}>
+                <div style={{ textAlign: 'center', color: '#aaa' }}><div style={{ fontSize: 32, marginBottom: 8 }}>👆</div><div style={{ fontSize: 13 }}>Click a volunteer to view profile</div></div>
               </div>
             )}
           </div>
@@ -162,61 +252,74 @@ export default function VolunteersPage() {
       {tab === 'schedule' && (
         <>
           <div className="flex-between" style={{ marginBottom: 12 }}>
-            <span className="section-title">Weekly schedule — 19–25 May 2026</span>
-            <button className="btn btn-primary btn-sm">+ Add shift</button>
+            <span className="section-title">Shift schedule</span>
+            <button className="btn btn-primary btn-sm" onClick={() => setShowShiftForm(!showShiftForm)}>
+              {showShiftForm ? '✕ Cancel' : '+ Add shift'}
+            </button>
           </div>
-          <div className="card" style={{ marginBottom: 14 }}>
-            <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4 }}>Volunteer hours by day</div>
-            <div style={{ fontSize: 12, color: '#888', marginBottom: 14 }}>Total scheduled hours per day this week</div>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 8 }}>
-              {days.map(({ d, h }) => (
-                <div key={d} style={{ textAlign: 'center' }}>
-                  <div style={{ fontSize: 11, color: '#aaa', marginBottom: 4 }}>{d}</div>
-                  <div style={{ fontSize: 14, fontWeight: 500, color: '#1a1a1a' }}>{h}h</div>
-                  <div className="prog-bg" style={{ marginTop: 6 }}>
-                    <div className="prog-fill" style={{ width: `${Math.round(h / 62 * 100)}%`, background: '#D85A30' }} />
+
+          {showShiftForm && (
+            <div className="card" style={{ marginBottom: 16, border: '1.5px solid #D85A30' }}>
+              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 14, color: '#D85A30' }}>📅 Add new shift</div>
+              <form onSubmit={handleAddShift}>
+                <div className="form-row">
+                  <div className="form-group"><label className="form-label">Volunteer *</label>
+                    <select className="form-input" value={shiftForm.volunteer_id} onChange={e => setShiftForm({ ...shiftForm, volunteer_id: e.target.value })} required>
+                      <option value="">Select volunteer</option>
+                      {volunteers.map(v => <option key={v.id} value={v.id}>{v.full_name}</option>)}
+                    </select>
+                  </div>
+                  <div className="form-group"><label className="form-label">Program</label>
+                    <select className="form-input" value={shiftForm.program} onChange={e => setShiftForm({ ...shiftForm, program: e.target.value })}>
+                      {['Hot meals', 'Food parcels', 'School feeding', 'Elderly care', 'Delivery', 'Food packing', 'Registration'].map(p => <option key={p}>{p}</option>)}
+                    </select>
                   </div>
                 </div>
-              ))}
+                <div className="form-row">
+                  <div className="form-group"><label className="form-label">Date</label><input className="form-input" type="date" value={shiftForm.shift_date} onChange={e => setShiftForm({ ...shiftForm, shift_date: e.target.value })} /></div>
+                  <div className="form-group"><label className="form-label">Hours</label><input className="form-input" type="number" min={1} max={24} value={shiftForm.hours} onChange={e => setShiftForm({ ...shiftForm, hours: parseFloat(e.target.value) })} /></div>
+                </div>
+                <div className="form-row">
+                  <div className="form-group"><label className="form-label">Start time</label><input className="form-input" type="time" value={shiftForm.start_time} onChange={e => setShiftForm({ ...shiftForm, start_time: e.target.value })} /></div>
+                  <div className="form-group"><label className="form-label">End time</label><input className="form-input" type="time" value={shiftForm.end_time} onChange={e => setShiftForm({ ...shiftForm, end_time: e.target.value })} /></div>
+                </div>
+                <div className="form-group"><label className="form-label">Status</label>
+                  <select className="form-input" value={shiftForm.status} onChange={e => setShiftForm({ ...shiftForm, status: e.target.value })}>
+                    {['Confirmed', 'Unfilled', 'Completed', 'Cancelled'].map(s => <option key={s}>{s}</option>)}
+                  </select>
+                </div>
+                <div className="flex-gap" style={{ marginTop: 8 }}>
+                  <button type="button" className="btn" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setShowShiftForm(false)}>Cancel</button>
+                  <button type="submit" className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }} disabled={saving}>{saving ? '⏳ Saving...' : '💾 Add shift'}</button>
+                </div>
+              </form>
             </div>
-          </div>
-          <div className="two-col">
-            <div className="table-wrap">
-              <table>
+          )}
+
+          <div className="table-wrap">
+            {shifts.length === 0 ? <div style={{ padding: '2rem', textAlign: 'center', color: '#888' }}>📅 No shifts scheduled yet — add the first one above!</div>
+              : <table>
                 <thead><tr>
-                  <th style={{ width: '28%' }}>Volunteer</th>
-                  <th style={{ width: '22%' }}>Program</th>
-                  <th style={{ width: '12%' }}>Day</th>
-                  <th style={{ width: '20%' }}>Time</th>
-                  <th style={{ width: '18%' }}>Status</th>
+                  <th style={{ width: '25%' }}>Volunteer</th><th style={{ width: '18%' }}>Program</th>
+                  <th style={{ width: '14%' }}>Date</th><th style={{ width: '12%' }}>Hours</th>
+                  <th style={{ width: '18%' }}>Time</th><th style={{ width: '13%' }}>Status</th>
                 </tr></thead>
                 <tbody>
-                  {shifts.map((s, i) => (
-                    <tr key={i}>
-                      <td><div className="name-cell"><div className="av" style={{ background: COLOURS[s.c].bg, color: COLOURS[s.c].tx }}>{ini(s.vol)}</div>{s.vol.split(' ')[0]}</div></td>
-                      <td style={{ fontSize: 12 }}>{s.prog}</td>
-                      <td style={{ fontSize: 12 }}>{s.day}</td>
-                      <td style={{ fontSize: 11, color: '#888' }}>{s.time}</td>
-                      <td><span className={`pill ${s.status === 'Confirmed' ? 'pill-green' : 'pill-red'}`}>{s.status}</span></td>
-                    </tr>
-                  ))}
+                  {shifts.map(s => {
+                    const vol = volunteers.find(v => v.id === s.volunteer_id);
+                    return (
+                      <tr key={s.id}>
+                        <td><div className="name-cell">{vol && <div className="av" style={{ background: colourFor(vol.full_name).bg, color: colourFor(vol.full_name).tx }}>{ini(vol.full_name)}</div>}{vol?.full_name || '—'}</div></td>
+                        <td style={{ fontSize: 12 }}>{s.program}</td>
+                        <td style={{ fontSize: 12 }}>{new Date(s.shift_date).toLocaleDateString('en-ZA')}</td>
+                        <td style={{ fontWeight: 500, color: '#D85A30' }}>{s.hours}h</td>
+                        <td style={{ fontSize: 11, color: '#888' }}>{s.start_time} – {s.end_time}</td>
+                        <td><span className={`pill ${s.status === 'Confirmed' || s.status === 'Completed' ? 'pill-green' : s.status === 'Unfilled' ? 'pill-red' : 'pill-gray'}`}>{s.status}</span></td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
-              </table>
-            </div>
-            <div className="card">
-              <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4 }}>⚠️ Unfilled shifts</div>
-              <div style={{ fontSize: 12, color: '#888', marginBottom: 12 }}>Needs urgent cover</div>
-              {unfilled.map((u, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px', borderRadius: 8, background: '#FFFBF5', border: '0.5px solid rgba(0,0,0,0.07)', marginBottom: 8 }}>
-                  <span style={{ fontSize: 13 }}>⚠️</span>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 12, fontWeight: 500 }}>{u.shift}</div>
-                    <div style={{ fontSize: 11, color: '#aaa' }}>{u.loc}</div>
-                  </div>
-                  <button className="btn btn-sm" style={{ padding: '3px 8px', fontSize: 11 }}>Cover</button>
-                </div>
-              ))}
-            </div>
+              </table>}
           </div>
         </>
       )}
