@@ -4,13 +4,16 @@ import { usePathname, useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 
 const navItems = [
-  { href: '/dashboard', label: 'Overview', icon: '📊' },
-  { href: '/beneficiaries', label: 'Beneficiaries', icon: '👥' },
-  { href: '/caregivers', label: 'Caregivers', icon: '🩺' },
-  { href: '/volunteers', label: 'Volunteers', icon: '🤝' },
-  { href: '/donors', label: 'Donors', icon: '💰' },
-  { href: '/meal-programs', label: 'Meal programs', icon: '🍲' },
-  { href: '/reports', label: 'Reports', icon: '📋' },
+  { href: '/dashboard', label: 'Overview', icon: '📊', section: null },
+  { href: '/beneficiaries', label: 'Beneficiaries', icon: '👥', section: 'PEOPLE' },
+  { href: '/caregivers', label: 'Caregivers', icon: '🩺', section: null },
+  { href: '/volunteers', label: 'Volunteers', icon: '🤝', section: null },
+  { href: '/donors', label: 'Donors', icon: '💰', section: null },
+  { href: '/meal-programs', label: 'Meal programs', icon: '🍲', section: 'PROGRAMS' },
+  { href: '/documents', label: 'Documents', icon: '📁', section: 'RECORDS' },
+  { href: '/reports', label: 'Reports', icon: '📋', section: null },
+  { href: '/audit-log', label: 'Audit log', icon: '🔍', section: null },
+  { href: '/settings', label: 'Settings & POPIA', icon: '🛡️', section: 'SYSTEM' },
 ];
 
 export default function Sidebar() {
@@ -21,6 +24,8 @@ export default function Sidebar() {
     await supabase.auth.signOut();
     router.push('/login');
   };
+
+  let lastSection = '';
 
   return (
     <aside className="sidebar">
@@ -33,7 +38,6 @@ export default function Sidebar() {
             <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.35)', letterSpacing: '0.05em' }}>npodesk.co.za</div>
           </div>
         </div>
-        {/* Client org */}
         <div style={{ background: 'rgba(255,255,255,0.06)', borderRadius: 8, padding: '8px 10px', display: 'flex', alignItems: 'center', gap: 8 }}>
           <div style={{ width: 26, height: 26, borderRadius: 6, background: '#D85A30', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, flexShrink: 0 }}>🍲</div>
           <div>
@@ -43,15 +47,24 @@ export default function Sidebar() {
         </div>
       </div>
 
-      <div className="nav-section">Main menu</div>
-      {navItems.map(item => (
-        <Link key={item.href} href={item.href} className={`nav-item ${path.startsWith(item.href) ? 'active' : ''}`}>
-          <span>{item.icon}</span>
-          <span>{item.label}</span>
-        </Link>
-      ))}
+      <div style={{ flex: 1, overflowY: 'auto' }}>
+        {navItems.map(item => {
+          const showSection = item.section && item.section !== lastSection;
+          if (item.section) lastSection = item.section;
+          return (
+            <div key={item.href}>
+              {showSection && (
+                <div className="nav-section">{item.section}</div>
+              )}
+              <Link href={item.href} className={`nav-item ${path.startsWith(item.href) ? 'active' : ''}`}>
+                <span>{item.icon}</span>
+                <span>{item.label}</span>
+              </Link>
+            </div>
+          );
+        })}
+      </div>
 
-      {/* Bottom */}
       <div className="sidebar-bottom">
         <div style={{ marginBottom: 10 }}>
           <div style={{ fontSize: 9, color: 'rgba(255,255,255,0.25)', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6 }}>Logged in as</div>
