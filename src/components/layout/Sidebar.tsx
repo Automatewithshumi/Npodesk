@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase';
 const navItems = [
   { href: '/dashboard', label: 'Overview', icon: '📊' },
   { href: '/beneficiaries', label: 'Beneficiaries', icon: '👥' },
+  { href: '/caregivers', label: 'Caregivers', icon: '🩺' },
   { href: '/volunteers', label: 'Volunteers', icon: '🤝' },
   { href: '/donors', label: 'Donors', icon: '💰' },
   { href: '/meal-programs', label: 'Meal programs', icon: '🍲' },
@@ -60,13 +61,7 @@ export default function Sidebar() {
               <div style={{ fontSize: 12, fontWeight: 500, color: 'rgba(255,255,255,0.85)' }}>Rachel</div>
               <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.35)' }}>Admin · Passionate FS</div>
             </div>
-            <button
-              onClick={handleLogout}
-              style={{ background: 'rgba(255,255,255,0.08)', border: 'none', borderRadius: 6, padding: '4px 8px', fontSize: 10, color: 'rgba(255,255,255,0.4)', cursor: 'pointer' }}
-              title="Sign out"
-            >
-              Exit
-            </button>
+            <button onClick={handleLogout} style={{ background: 'rgba(255,255,255,0.08)', border: 'none', borderRadius: 6, padding: '4px 8px', fontSize: 10, color: 'rgba(255,255,255,0.4)', cursor: 'pointer' }} title="Sign out">Exit</button>
           </div>
         </div>
         <div style={{ borderTop: '0.5px solid rgba(255,255,255,0.08)', paddingTop: 10, display: 'flex', justifyContent: 'space-between' }}>
