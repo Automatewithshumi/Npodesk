@@ -1,0 +1,149 @@
+YOUR PROPOSAL DOCUMENT STRUCTURE
+When you get a big lead, send a formal proposal with these sections:
+
+1. Cover page
+   NpoDesk logo + client name + date
+
+2. Executive summary (1 page)
+   The problem they have
+   How NpoDesk solves it
+   The investment required
+
+3. Solution overview (2 pages)
+   Screenshots of every module
+   List of all features
+   POPIA compliance section
+
+4. Implementation plan (1 page)
+   Week 1: Setup & data migration
+   Week 2: Staff training
+   Week 3: Go-live & support
+   Week 4: Review & handover
+
+5. Pricing (1 page)
+   Setup fee: R___
+   Monthly fee: R___/month
+   Support tier: R___/month
+   Total Year 1: R___
+
+6. Terms & conditions (1 page)
+   Payment terms: 50% upfront, 50% on go-live
+   Contract period: 12 months minimum
+   Notice period: 30 days
+   Data ownership: Client owns their data
+   Uptime guarantee: 99.5%
+
+7. About NpoDesk (1 page)
+   Who you are
+   Your mission
+   Contact details
+
+
+
+
+________________________________________________________________________________
+
+ROTECTING YOURSELF LEGALLY
+You need 3 documents:
+1. Service Agreement
+
+Covers:
+- What you will deliver
+- Payment terms
+- What happens if they don't pay
+- Intellectual property (you own the code)
+- Termination clauses
+
+
+__________________________________________________________________________________
+
+SLA (Service Level Agreement)
+
+Covers:
+- Uptime guarantees (99.5%)
+- Response times for support
+- Maintenance windows
+- Backup and recovery
+
+___________________________________________________________________________________
+
+You can get template versions of all 3 from:
+
+LegalWise (South Africa) — affordable legal templates
+Clerck.co.za — SA contract templates
+A local attorney for R2,000–R5,000 to draft properly
+
+___________________________________________________________________________________
+
+THE BIG CONTRACT PLAYBOOK
+Step 1 — Get the meeting
+
+Don't email. Phone or WhatsApp first:
+"Hi, I build digital management systems for NPOs 
+in South Africa. I'd love 20 minutes to show you 
+what we've built for feeding schemes in Joburg.
+Are you available this week?"
+
+__________________________________________________________________________
+
+Step 2 — The demo meeting
+
+Show live system on your laptop/phone
+Walk through every module — 20 minutes
+Ask them: "What's your biggest admin challenge?"
+Let them talk — then show how NpoDesk solves it
+End with: "I can have this set up for your team 
+within 2 weeks. Shall I send a proposal?"
+
+_________________________________________________________________________
+
+ YOUR IMMEDIATE ACTION PLAN
+This week:
+
+Share Rachel's live link with 3 more NPOs
+Register npodesk.co.za domain at Afrihost
+Create a simple 1-page website for NpoDesk
+Write your proposal template (I can build this for you)
+
+This month:
+
+Get Rachel to give you a testimonial quote
+Pitch 2 corporate CSI departments using Rachel as case study
+Join these SA NPO networks to find clients:
+
+SANGOCO (sangoco.org.za)
+Inyathelo (inyathelo.org.za)
+SANGONeT (sangonet.org.za)
+
+In 3 months:
+
+First paying client beyond Rachel
+Start building your case study portfolio
+Approach municipalities — Joburg, Tshwane, Ekurhuleni
+
+
+🎯 BOTTOM LINE
+You have a product worth R500,000+ in year 1 if you land one government or corporate contract. The system is built. The hard part is done.
+What you need now is not more features — you need sales.
+Shall I build you:
+
+A professional NpoDesk website to send to prospects?
+A pitch deck (PowerPoint) for corporate CSI meetings?
+A proposal template you can customise per client?
+
+All three together would make you look like a R5 million company. Which do you want first?
+
+__________________________________________________________________________________________________
+
+Now let's talk about growing this into a business.
+You asked about big contracts. I can build you 3 things that will make you look like a serious company:
+1. 🌐 NpoDesk marketing website
+A professional landing page at npodesk.co.za that explains what the product does, shows features, has pricing plans and a "Book a demo" button. This is what you send to CSI departments and NPO networks.
+2. 📊 Pitch deck (PowerPoint)
+A 10-slide deck for corporate CSI meetings — problem, solution, screenshots, pricing, case study with Rachel/Passionate Feeding Scheme, and a call to action.
+3. 📄 Proposal template
+A branded Word/PDF document you customise per client — executive summary, solution overview, implementation plan, and pricing table.
+
+
+________________________________________________________________________________________________
+

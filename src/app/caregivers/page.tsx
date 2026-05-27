@@ -328,9 +328,13 @@ export default function CaregiversPage() {
                 </button>
                 <button className="btn btn-sm" style={{ flex: 1, justifyContent: 'center', color: '#791F1F' }}
                   onClick={async () => {
-                    if (confirm(`Remove ${sel.name}?`)) {
-                      await supabase.from('caregivers').delete().eq('id', sel.id);
-                      setSel(null); loadData(orgId); showToast(`${sel.name} removed`);
+                    if (confirm(`Remove ${sel.name}? Any beneficiaries assigned will be unlinked.`)) {
+                      // First unlink all beneficiaries from this caregiver
+                      await supabase.from('beneficiaries').update({ caregiver_id: null }).eq('caregiver_id', sel.id);
+                      // Then delete the caregiver
+                      const { error } = await supabase.from('caregivers').delete().eq('id', sel.id);
+                      if (error) { showToast(`Failed to delete: ${error.message}`, 'error'); }
+                      else { setSel(null); loadData(orgId); showToast(`${sel.name} removed successfully`); }
                     }
                   }}>🗑 Remove</button>
               </div>

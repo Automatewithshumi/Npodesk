@@ -220,9 +220,13 @@ export default function MealProgramsPage() {
                 <div className="flex-gap" style={{ marginTop: 12 }}>
                   <button className="btn btn-primary btn-sm" style={{ flex: 1, justifyContent: 'center' }} onClick={() => { setLogForm({ ...logForm, site_id: sel.id, target: sel.capacity }); setTab('log'); setShowLogForm(true); }}>📋 Log meals</button>
                   <button className="btn btn-sm" style={{ flex: 1, justifyContent: 'center', color: '#791F1F' }} onClick={async () => {
-                    if (confirm(`Remove ${sel.name}?`)) {
-                      await supabase.from('meal_sites').delete().eq('id', sel.id);
-                      setSel(null); loadData(orgId); showToast(`${sel.name} removed`);
+                    if (confirm(`Remove ${sel.name}? All meal logs for this site will also be deleted.`)) {
+                      // First delete all meal logs for this site
+                      await supabase.from('meal_logs').delete().eq('site_id', sel.id);
+                      // Then delete the site
+                      const { error } = await supabase.from('meal_sites').delete().eq('id', sel.id);
+                      if (error) { showToast(`Failed to delete: ${error.message}`, 'error'); }
+                      else { setSel(null); loadData(orgId); showToast(`${sel.name} removed successfully`); }
                     }
                   }}>🗑 Remove</button>
                 </div>

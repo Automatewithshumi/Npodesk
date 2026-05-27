@@ -233,9 +233,13 @@ export default function VolunteersPage() {
                 <div className="flex-gap" style={{ marginTop: 14 }}>
                   <button className="btn btn-sm" style={{ flex: 1, justifyContent: 'center' }} onClick={() => { setShiftForm({ ...shiftForm, volunteer_id: sel.id }); setTab('schedule'); setShowShiftForm(true); }}>📅 Add shift</button>
                   <button className="btn btn-sm" style={{ flex: 1, justifyContent: 'center', color: '#791F1F' }} onClick={async () => {
-                    if (confirm(`Remove ${sel.full_name}?`)) {
-                      await supabase.from('volunteers').delete().eq('id', sel.id);
-                      setSel(null); loadData(orgId); showToast(`${sel.full_name} removed`);
+                    if (confirm(`Remove ${sel.full_name}? Their shift history will also be deleted.`)) {
+                      // First delete all shifts for this volunteer
+                      await supabase.from('shifts').delete().eq('volunteer_id', sel.id);
+                      // Then delete the volunteer
+                      const { error } = await supabase.from('volunteers').delete().eq('id', sel.id);
+                      if (error) { showToast(`Failed to delete: ${error.message}`, 'error'); }
+                      else { setSel(null); loadData(orgId); showToast(`${sel.full_name} removed successfully`); }
                     }
                   }}>🗑 Remove</button>
                 </div>

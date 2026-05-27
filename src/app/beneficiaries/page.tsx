@@ -294,9 +294,11 @@ export default function BeneficiariesPage() {
               <button className="btn btn-sm" style={{ flex: 1, justifyContent: 'center', color: '#791F1F' }}
                 onClick={async () => {
                   if (confirm(`Remove ${sel.full_name}? This cannot be undone.`)) {
+                    // Delete linked documents first
+                    await supabase.from('documents').delete().eq('beneficiary_id', sel.id);
                     const { error } = await supabase.from('beneficiaries').delete().eq('id', sel.id);
-                    if (!error) { setSel(null); loadData(orgId); showToast(`${sel.full_name} removed`); }
-                    else showToast('Failed to remove', 'error');
+                    if (!error) { setSel(null); loadData(orgId); showToast(`${sel.full_name} removed successfully`); }
+                    else showToast(`Failed to remove: ${error.message}`, 'error');
                   }
                 }}>🗑 Remove</button>
             </div>
