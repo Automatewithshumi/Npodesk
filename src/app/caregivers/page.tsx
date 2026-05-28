@@ -200,7 +200,7 @@ export default function CaregiversPage() {
               <div className="form-group">
                 <label className="form-label">Area</label>
                 <select className="form-input" value={form.area} onChange={e => setForm({ ...form, area: e.target.value })}>
-                  {['Soweto', 'Alexandra', 'Diepsloot', 'Orange Farm', 'Tembisa', 'Sandton', 'Other'].map(a => <option key={a}>{a}</option>)}
+                  {['Soul City', 'Senqobile Phase 1', 'Senqobile Phase 2', 'Senqobile Phase 3', 'Senqobile Phase 4', 'Tudor Shaft', 'Extension 10', 'Leswasham', 'Other'].map(a => <option key={a}>{a}</option>)}
                 </select>
               </div>
             </div>
@@ -234,7 +234,7 @@ export default function CaregiversPage() {
         <input placeholder="Search caregiver name or area..." value={search} onChange={e => setSearch(e.target.value)} />
         <select value={areaF} onChange={e => setAreaF(e.target.value)}>
           <option value="">All areas</option>
-          {['Soweto', 'Alexandra', 'Diepsloot', 'Orange Farm', 'Tembisa', 'Sandton'].map(a => <option key={a}>{a}</option>)}
+          {['Soul City', 'Senqobile Phase 1', 'Senqobile Phase 2', 'Senqobile Phase 3', 'Senqobile Phase 4', 'Tudor Shaft', 'Extension 10', 'Leswasham'].map(a => <option key={a}>{a}</option>)}
         </select>
       </div>
 

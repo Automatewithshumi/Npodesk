@@ -161,7 +161,7 @@ export default function MealProgramsPage() {
                   <div className="form-group"><label className="form-label">Site name *</label><input className="form-input" value={siteForm.name} onChange={e => setSiteForm({ ...siteForm, name: e.target.value })} placeholder="e.g. Soweto North Kitchen" required /></div>
                   <div className="form-group"><label className="form-label">Area</label>
                     <select className="form-input" value={siteForm.area} onChange={e => setSiteForm({ ...siteForm, area: e.target.value })}>
-                      {['Soweto', 'Alexandra', 'Diepsloot', 'Orange Farm', 'Tembisa', 'Sandton', 'Other'].map(a => <option key={a}>{a}</option>)}
+                      {['Soul City', 'Senqobile Phase 1', 'Senqobile Phase 2', 'Senqobile Phase 3', 'Senqobile Phase 4', 'Tudor Shaft', 'Extension 10', 'Leswasham', 'Other'].map(a => <option key={a}>{a}</option>)}
                     </select>
                   </div>
                 </div>

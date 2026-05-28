@@ -169,7 +169,7 @@ export default function VolunteersPage() {
                 <div className="form-row">
                   <div className="form-group"><label className="form-label">Area</label>
                     <select className="form-input" value={volForm.area} onChange={e => setVolForm({ ...volForm, area: e.target.value })}>
-                      {['Soweto', 'Alexandra', 'Diepsloot', 'Orange Farm', 'Tembisa', 'Sandton', 'Other'].map(a => <option key={a}>{a}</option>)}
+                      {['Soul City', 'Senqobile Phase 1', 'Senqobile Phase 2', 'Senqobile Phase 3', 'Senqobile Phase 4', 'Tudor Shaft', 'Extension 10', 'Leswasham', 'Other'].map(a => <option key={a}>{a}</option>)}
                     </select>
                   </div>
                   <div className="form-group"><label className="form-label">Phone</label><input className="form-input" value={volForm.phone} onChange={e => setVolForm({ ...volForm, phone: e.target.value })} placeholder="07x xxx xxxx" /></div>
