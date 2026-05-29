@@ -41,7 +41,11 @@ export default function Dashboard() {
   const [monthlyData, setMonthlyData] = useState<MonthlyData[]>([]);
   const [loading, setLoading] = useState(true);
   const [orgId, setOrgId] = useState('');
-  const [userName, setUserName] = useState('Rachel');
+  const [userName, setUserName] = useState('');
+  const [orgName, setOrgName] = useState('');
+  const [orgCity, setOrgCity] = useState('');
+  const [orgColour, setOrgColour] = useState('#D85A30');
+  const [orgColourDark, setOrgColourDark] = useState('#a8411f');
 
   const loadDashboard = useCallback(async (oid: string) => {
     const [
@@ -169,6 +173,20 @@ export default function Dashboard() {
       if (userData?.org_id) {
         setOrgId(userData.org_id);
         if (userData.full_name) setUserName(userData.full_name);
+        // Load org details
+        const { data: orgData } = await supabase
+          .from('organisations')
+          .select('name, city, primary_colour')
+          .eq('id', userData.org_id)
+          .single();
+        if (orgData) {
+          setOrgName(orgData.name || '');
+          setOrgCity(orgData.city || '');
+          const col = orgData.primary_colour || '#D85A30';
+          setOrgColour(col);
+          // Darken colour for gradient
+          setOrgColourDark(col + 'cc');
+        }
         loadDashboard(userData.org_id);
       } else {
         setLoading(false);
@@ -196,13 +214,13 @@ export default function Dashboard() {
   return (
     <>
       {/* Welcome banner */}
-      <div style={{ background: 'linear-gradient(135deg, #D85A30 0%, #a8411f 100%)', borderRadius: 12, padding: '1.25rem 1.5rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+      <div style={{ background: `linear-gradient(135deg, ${orgColour} 0%, ${orgColourDark} 100%)`, borderRadius: 12, padding: '1.25rem 1.5rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div>
           <div style={{ fontSize: 18, fontWeight: 600, color: '#fff', marginBottom: 4 }}>
             👋 Welcome back, {userName}!
           </div>
           <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)' }}>
-            Passionate Feeding Scheme · Johannesburg · {new Date().toLocaleDateString('en-ZA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+            {orgName} · {orgCity} · {new Date().toLocaleDateString('en-ZA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
           </div>
         </div>
         <div style={{ textAlign: 'right' }}>
