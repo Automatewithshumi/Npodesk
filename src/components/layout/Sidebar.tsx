@@ -14,6 +14,7 @@ const navItems = [
   { href: '/documents', label: 'Documents', icon: '📁', section: 'RECORDS' },
   { href: '/reports', label: 'Reports', icon: '📋', section: null },
   { href: '/audit-log', label: 'Audit log', icon: '🔍', section: null },
+  { href: '/funding-agent', label: 'Funding Agent 🤖', icon: '💰', section: 'TOOLS' },
   { href: '/settings', label: 'Settings & POPIA', icon: '🛡️', section: 'SYSTEM' },
 ];
 

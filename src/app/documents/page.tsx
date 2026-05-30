@@ -245,6 +245,91 @@ export default function DocumentsPage() {
     }
   };
 
+  const exportDocumentReport = async () => {
+    showToast('Generating PDF report...', 'info');
+    const { default: jsPDF } = await import('jspdf');
+    const { default: autoTable } = await import('jspdf-autotable');
+
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const pageW = doc.internal.pageSize.getWidth();
+    const date = new Date().toLocaleDateString('en-ZA');
+
+    // Header
+    doc.setFillColor(216, 90, 48);
+    doc.rect(0, 0, pageW, 28, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Document Upload Register', 14, 12);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Generated: ${date} · NpoDesk · npodesk.co.za`, 14, 21);
+
+    doc.setTextColor(0, 0, 0);
+
+    // Summary stats
+    const verified = documents.filter(d => d.verified).length;
+    const pending = documents.filter(d => !d.verified).length;
+
+    autoTable(doc, {
+      startY: 36,
+      body: [
+        ['Total documents', documents.length.toString(), 'Verified', verified.toString()],
+        ['Pending review', pending.toString(), 'Visit forms', documents.filter(d => d.doc_type === 'Visit form').length.toString()],
+      ],
+      theme: 'grid',
+      styles: { fontSize: 10, cellPadding: 3 },
+      columnStyles: {
+        0: { fontStyle: 'bold', fillColor: [250, 236, 231], textColor: [113, 43, 19] },
+        2: { fontStyle: 'bold', fillColor: [250, 236, 231], textColor: [113, 43, 19] },
+      },
+    });
+
+    // Documents table
+    const finalY = (doc as any).lastAutoTable.finalY + 8;
+    doc.setFontSize(13);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(216, 90, 48);
+    doc.text(`All Documents (${documents.length})`, 14, finalY);
+    doc.setTextColor(0, 0, 0);
+
+    autoTable(doc, {
+      startY: finalY + 4,
+      head: [['File Name', 'Type', 'Beneficiary', 'Caregiver', 'Visit Date', 'Size', 'Status']],
+      body: documents.map(d => {
+        const ben = beneficiaries.find(b => b.id === d.beneficiary_id);
+        const cg = caregivers.find(c => c.id === d.caregiver_id);
+        return [
+          d.file_name,
+          d.doc_type,
+          ben?.full_name || '—',
+          cg?.name || '—',
+          d.visit_date || '—',
+          formatSize(d.file_size),
+          d.verified ? 'Verified ✓' : 'Pending',
+        ];
+      }),
+      theme: 'striped',
+      headStyles: { fillColor: [216, 90, 48], textColor: 255, fontStyle: 'bold', fontSize: 9 },
+      styles: { fontSize: 8, cellPadding: 2 },
+      columnStyles: {
+        6: { textColor: [100, 100, 100] as [number, number, number] }
+      }
+    });
+
+    // Footer
+    const pageCount = doc.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(170, 170, 170);
+      doc.text(`Document Register · NpoDesk · npodesk.co.za · Page ${i} of ${pageCount}`, pageW / 2, 290, { align: 'center' });
+    }
+
+    doc.save(`document_register_${new Date().toISOString().split('T')[0]}.pdf`);
+    showToast('Document register PDF downloaded!');
+  };
+
   const exportCSV = () => {
     if (documents.length === 0) { showToast('No documents to export', 'error'); return; }
     const headers = ['File Name', 'Type', 'Document Type', 'Beneficiary', 'Caregiver', 'Visit Date', 'File Size', 'Verified', 'Uploaded', 'Notes'];
@@ -289,7 +374,8 @@ export default function DocumentsPage() {
         </div>
         <div className="flex-gap">
           <span className="live-badge">● Live</span>
-          <button className="btn btn-sm" onClick={exportCSV}>⬇ Export log</button>
+          <button className="btn btn-sm" onClick={exportCSV}>⬇ CSV log</button>
+          <button className="btn btn-sm" onClick={exportDocumentReport}>📄 PDF report</button>
           <button className="btn btn-primary btn-sm" onClick={() => setShowForm(!showForm)}>
             {showForm ? '✕ Cancel' : '⬆ Upload document'}
           </button>
@@ -556,10 +642,40 @@ create policy "documents_access" on documents
 
               <div className="flex-gap" style={{ marginTop: 14 }}>
                 <a href={sel.file_url} target="_blank" rel="noopener noreferrer" className="btn btn-sm" style={{ flex: 1, justifyContent: 'center', textDecoration: 'none' }}>
-                  👁 View file
+                  👁 View
                 </a>
+                <a
+                  href={sel.file_url}
+                  download={sel.file_name}
+                  className="btn btn-primary btn-sm"
+                  style={{ flex: 1, justifyContent: 'center', textDecoration: 'none' }}
+                  onClick={async () => {
+                    // For cross-origin files, fetch and force download
+                    try {
+                      const response = await fetch(sel.file_url);
+                      const blob = await response.blob();
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = sel.file_name;
+                      document.body.appendChild(a);
+                      a.click();
+                      document.body.removeChild(a);
+                      URL.revokeObjectURL(url);
+                      showToast(`${sel.file_name} downloaded!`);
+                    } catch {
+                      // Fallback — open in new tab
+                      window.open(sel.file_url, '_blank');
+                      showToast('Opening file for download...', 'info');
+                    }
+                  }}
+                >
+                  ⬇ Download
+                </a>
+              </div>
+              <div className="flex-gap" style={{ marginTop: 8 }}>
                 {!sel.verified && (
-                  <button className="btn btn-primary btn-sm" style={{ flex: 1, justifyContent: 'center' }} onClick={() => handleVerify(sel)}>
+                  <button className="btn btn-sm" style={{ flex: 1, justifyContent: 'center' }} onClick={() => handleVerify(sel)}>
                     ✅ Verify
                   </button>
                 )}
