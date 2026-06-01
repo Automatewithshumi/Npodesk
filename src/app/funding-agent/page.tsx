@@ -143,42 +143,35 @@ Respond ONLY with a JSON object in this exact format:
 }`;
 
     try {
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
+      const response = await fetch('/api/funding', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 4000,
-          tools: [{ type: 'web_search_20250305', name: 'web_search' }],
-          messages: [{ role: 'user', content: prompt }]
-        })
+        body: JSON.stringify({ orgName, orgCity, searchType }),
       });
 
-      const data = await response.json();
       stopDots();
 
-      // Extract text from response
-      const textContent = data.content
-        ?.filter((c: any) => c.type === 'text')
-        ?.map((c: any) => c.text)
-        ?.join('') || '';
-
-      // Parse JSON from response
-      const jsonMatch = textContent.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        setResult({
-          ...parsed,
-          searchedAt: new Date().toLocaleString('en-ZA'),
-        });
-        showToast(`Found ${parsed.funders?.length || 0} verified funding opportunities!`);
-      } else {
-        throw new Error('Could not parse response');
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || 'API call failed');
       }
-    } catch (err) {
+
+      const parsed = await response.json();
+
+      if (parsed.error) {
+        throw new Error(parsed.error);
+      }
+
+      setResult({
+        ...parsed,
+        searchedAt: new Date().toLocaleString('en-ZA'),
+      });
+      showToast(`Found ${parsed.funders?.length || 0} verified funding opportunities!`);
+    } catch (err: unknown) {
       stopDots();
-      console.error(err);
-      showToast('Search failed. Please try again.', 'error');
+      const error = err as Error;
+      console.error('Funding search error:', error);
+      showToast(`Search failed: ${error.message || 'Please try again'}`, 'error');
     }
 
     setLoading(false);
