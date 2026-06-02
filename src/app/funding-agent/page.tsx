@@ -275,7 +275,7 @@ export default function FundingAgentPage() {
       setSearched(true);
       setLastSearched(new Date().toLocaleString('en-ZA'));
       setLoading(false);
-      showToast(`Found ${matched.length} verified funding opportunities — 0 cost!`);
+      showToast(`Found ${matched.length} verified funding opportunities for ${orgName}!`);
     }, 1800);
   };
 
@@ -310,10 +310,10 @@ export default function FundingAgentPage() {
       <div className="topbar">
         <div>
           <div className="page-title">💰 Funding Agent</div>
-          <div className="page-sub">Verified SA funders · Zero cost · No APIs · Always up to date</div>
+          <div className="page-sub">Verified South African funders · Scam-filtered · Direct contacts</div>
         </div>
         <div className="flex-gap">
-          <span style={{ fontSize: 11, padding: '3px 10px', borderRadius: 99, background: '#EAF3DE', color: '#27500A', fontWeight: 500 }}>🆓 100% Free</span>
+
           {lastSearched && <span style={{ fontSize: 12, color: '#888', background: '#fff', border: '0.5px solid rgba(0,0,0,0.1)', borderRadius: 6, padding: '4px 10px' }}>Last searched: {lastSearched}</span>}
         </div>
       </div>
@@ -326,11 +326,11 @@ export default function FundingAgentPage() {
             Verified South African funding database — {orgName || 'your NPO'}
           </div>
           <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.75)', lineHeight: 1.6 }}>
-            {ALL_FUNDERS.length} pre-verified SA funders — government grants, corporate CSI, foundations and international donors. All contacts verified. Scams blocked. Zero cost, zero API, works offline.
+            {ALL_FUNDERS.length} pre-verified SA funders — government grants, corporate CSI, foundations and international donors. All contacts verified. Scams automatically blocked. Direct links and step-by-step application guides included.
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', flexShrink: 0 }}>
-          {['✅ Real contacts', '🛡️ Scam-free', '🔗 Direct links', '🆓 Zero cost'].map(b => (
+          {['✅ Real contacts', '🛡️ Scam-free', '🔗 Direct links', '📋 Step-by-step guides'].map(b => (
             <span key={b} style={{ fontSize: 10, background: 'rgba(255,255,255,0.15)', color: '#fff', padding: '3px 10px', borderRadius: 99, border: '0.5px solid rgba(255,255,255,0.2)' }}>{b}</span>
           ))}
         </div>
@@ -554,7 +554,7 @@ export default function FundingAgentPage() {
           <div style={{ fontSize: 64, marginBottom: 16 }}>💰</div>
           <div style={{ fontSize: 18, fontWeight: 500, color: '#1a1a1a', marginBottom: 8 }}>Find funding for {orgName || 'your NPO'} — free</div>
           <div style={{ fontSize: 14, color: '#888', maxWidth: 520, margin: '0 auto 2rem', lineHeight: 1.7 }}>
-            {ALL_FUNDERS.length} verified South African funders in our database. Government grants, corporate CSI, foundations and international donors — all with real contacts and direct application links.
+            {ALL_FUNDERS.length} verified South African funders in our database. Government grants, corporate CSI, foundations and international donors — all with real contacts, step-by-step guides and direct application links.
           </div>
           <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
             {[`🏛 ${govCount > 0 ? govCount : 4} Govt grants`, `🏢 6 Corporate CSI`, `🌱 3 Foundations`, `🌍 3 International`].map(b => (
