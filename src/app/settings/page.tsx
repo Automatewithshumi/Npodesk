@@ -18,6 +18,14 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [userEmail, setUserEmail] = useState('');
   const [sessionInfo, setSessionInfo] = useState<{ lastLogin: string; expiresAt: string } | null>(null);
+  const [mfaFactors, setMfaFactors] = useState<any[]>([]);
+  const [mfaEnrolling, setMfaEnrolling] = useState(false);
+  const [mfaQR, setMfaQR] = useState('');
+  const [mfaSecret, setMfaSecret] = useState('');
+  const [mfaFactorId, setMfaFactorId] = useState('');
+  const [mfaCode, setMfaCode] = useState('');
+  const [mfaVerifying, setMfaVerifying] = useState(false);
+  const [mfaEnrolled, setMfaEnrolled] = useState(false);
   const router = useRouter();
 
   const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
@@ -25,7 +33,7 @@ export default function SettingsPage() {
   };
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
+    supabase.auth.getSession().then(async ({ data }) => {
       if (data.session) {
         setUserEmail(data.session.user.email || '');
         const createdAt = new Date(data.session.user.created_at);
@@ -34,9 +42,55 @@ export default function SettingsPage() {
           lastLogin: createdAt.toLocaleString('en-ZA'),
           expiresAt: expires.toLocaleString('en-ZA'),
         });
+        // Load MFA factors
+        const { data: factors } = await supabase.auth.mfa.listFactors();
+        if (factors?.totp && factors.totp.length > 0) {
+          setMfaFactors(factors.totp);
+          setMfaEnrolled(factors.totp.some((f: any) => f.status === 'verified'));
+        }
       }
     });
   }, []);
+
+  const handleEnrollMFA = async () => {
+    setMfaEnrolling(true);
+    const { data, error } = await supabase.auth.mfa.enroll({ factorType: 'totp', friendlyName: 'NpoDesk Authenticator' });
+    if (error) { showToast(`Failed to start 2FA setup: ${error.message}`, 'error'); setMfaEnrolling(false); return; }
+    if (data) {
+      setMfaQR(data.totp.qr_code);
+      setMfaSecret(data.totp.secret);
+      setMfaFactorId(data.id);
+    }
+    setMfaEnrolling(false);
+  };
+
+  const handleVerifyMFA = async () => {
+    if (!mfaCode || mfaCode.length !== 6) { showToast('Enter the 6-digit code from your authenticator app', 'error'); return; }
+    setMfaVerifying(true);
+    const { data: challengeData, error: challengeError } = await supabase.auth.mfa.challenge({ factorId: mfaFactorId });
+    if (challengeError) { showToast(`Challenge failed: ${challengeError.message}`, 'error'); setMfaVerifying(false); return; }
+    const { error: verifyError } = await supabase.auth.mfa.verify({
+      factorId: mfaFactorId,
+      challengeId: challengeData.id,
+      code: mfaCode,
+    });
+    if (verifyError) { showToast(`Wrong code — try again: ${verifyError.message}`, 'error'); setMfaVerifying(false); return; }
+    setMfaEnrolled(true);
+    setMfaQR('');
+    setMfaSecret('');
+    setMfaCode('');
+    showToast('Two-factor authentication enabled successfully! 🔐');
+    setMfaVerifying(false);
+  };
+
+  const handleDisableMFA = async (factorId: string) => {
+    if (!confirm('Disable two-factor authentication? Your account will be less secure.')) return;
+    const { error } = await supabase.auth.mfa.unenroll({ factorId });
+    if (error) { showToast(`Failed to disable 2FA: ${error.message}`, 'error'); return; }
+    setMfaEnrolled(false);
+    setMfaFactors([]);
+    showToast('Two-factor authentication disabled');
+  };
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -134,7 +188,73 @@ export default function SettingsPage() {
               <div className="d-row"><span className="d-label">Email</span><span className="d-value" style={{ fontSize: 12 }}>{userEmail}</span></div>
               <div className="d-row"><span className="d-label">Account created</span><span className="d-value">{sessionInfo?.lastLogin || '—'}</span></div>
               <div className="d-row"><span className="d-label">Session expires</span><span className="d-value">{sessionInfo?.expiresAt || '—'}</span></div>
-              <div className="d-row" style={{ border: 'none' }}><span className="d-label">Two-factor auth</span><span className="pill pill-amber">Not enabled</span></div>
+              <div className="d-row" style={{ border: 'none', alignItems: 'flex-start', flexDirection: 'column', gap: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                  <span className="d-label">Two-factor auth</span>
+                  {mfaEnrolled
+                    ? <span className="pill pill-green">✅ Enabled</span>
+                    : <span className="pill pill-amber">Not enabled</span>}
+                </div>
+
+                {/* MFA not enrolled — show setup */}
+                {!mfaEnrolled && !mfaQR && (
+                  <button className="btn btn-primary btn-sm" style={{ width: '100%', justifyContent: 'center' }}
+                    onClick={handleEnrollMFA} disabled={mfaEnrolling}>
+                    {mfaEnrolling ? '⏳ Setting up...' : '🔐 Enable two-factor authentication'}
+                  </button>
+                )}
+
+                {/* QR code step */}
+                {mfaQR && !mfaEnrolled && (
+                  <div style={{ width: '100%', background: '#FAFAF8', borderRadius: 10, padding: '14px', border: '0.5px solid rgba(0,0,0,0.08)' }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#1a1a1a', marginBottom: 10 }}>📱 Scan with your authenticator app</div>
+                    <div style={{ fontSize: 12, color: '#888', marginBottom: 12, lineHeight: 1.6 }}>
+                      Open <strong>Google Authenticator</strong> or <strong>Microsoft Authenticator</strong> on your phone and scan this QR code:
+                    </div>
+                    {/* QR code image */}
+                    <div style={{ textAlign: 'center', marginBottom: 12 }}>
+                      <img src={mfaQR} alt="MFA QR Code" style={{ width: 160, height: 160, borderRadius: 8, border: '2px solid #D85A30' }} />
+                    </div>
+                    {/* Manual secret */}
+                    <div style={{ fontSize: 11, color: '#888', marginBottom: 6 }}>Or enter this code manually:</div>
+                    <div style={{ background: '#1C1410', borderRadius: 6, padding: '8px 12px', fontSize: 13, fontFamily: 'monospace', color: '#e0d8d0', letterSpacing: 2, textAlign: 'center', marginBottom: 14 }}>
+                      {mfaSecret}
+                    </div>
+                    {/* Verify code */}
+                    <div style={{ fontSize: 12, color: '#555', marginBottom: 6 }}>Enter the 6-digit code from your app to confirm:</div>
+                    <input
+                      className="form-input"
+                      type="text"
+                      maxLength={6}
+                      placeholder="000000"
+                      value={mfaCode}
+                      onChange={e => setMfaCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      style={{ textAlign: 'center', fontSize: 20, letterSpacing: 8, marginBottom: 10 }}
+                    />
+                    <div className="flex-gap">
+                      <button className="btn btn-sm" style={{ flex: 1, justifyContent: 'center' }} onClick={() => { setMfaQR(''); setMfaSecret(''); }}>Cancel</button>
+                      <button className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }} onClick={handleVerifyMFA} disabled={mfaVerifying || mfaCode.length !== 6}>
+                        {mfaVerifying ? '⏳ Verifying...' : '✅ Verify & enable'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* MFA enrolled — show disable option */}
+                {mfaEnrolled && (
+                  <div style={{ width: '100%', background: '#EAF3DE', borderRadius: 8, padding: '10px 14px', border: '0.5px solid #b0d890' }}>
+                    <div style={{ fontSize: 12, color: '#27500A', fontWeight: 500, marginBottom: 4 }}>🔐 Your account is protected with 2FA</div>
+                    <div style={{ fontSize: 11, color: '#3B6D11', marginBottom: 10 }}>You will be asked for a code from your authenticator app each time you log in.</div>
+                    {mfaFactors.map((f: any) => (
+                      <button key={f.id} className="btn btn-sm" style={{ color: '#791F1F', fontSize: 11 }}
+                        onClick={() => handleDisableMFA(f.id)}>
+                        🗑 Disable 2FA
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               <button className="btn btn-primary btn-sm" style={{ marginTop: 14, width: '100%', justifyContent: 'center' }}
                 onClick={handleSignOutAll}>
                 🚪 Sign out of all devices
