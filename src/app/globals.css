@@ -36,6 +36,8 @@ body { font-family: system-ui, -apple-system, sans-serif; background: #F7F5F2; c
 .nav-section { font-size: 10px; color: rgba(255,255,255,0.25); padding: 10px 1.25rem 4px; letter-spacing: 0.08em; text-transform: uppercase; }
 
 .main { margin-left: var(--sidebar-w); min-height: 100vh; padding: 2rem; }
+.layout { display: flex; min-height: 100vh; }
+.main-content { margin-left: var(--sidebar-w); min-height: 100vh; padding: 2rem; flex: 1; }
 .topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.75rem; }
 .page-title { font-size: 20px; font-weight: 500; color: #1a1a1a; }
 .page-sub { font-size: 13px; color: #888; margin-top: 2px; }
