@@ -4,3 +4,14 @@ node_modules/
 .env
 *.log
 .DS_Store
+src/app/audit-log 
+src/app/beneficiaries 
+src/app/caregivers 
+src/app/dashboard 
+src/app/documents 
+src/app/donors 
+src/app/funding-agent 
+src/app/meal-programs 
+src/app/reports 
+src/app/settings 
+src/app/volunteers 
