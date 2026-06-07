@@ -71,37 +71,27 @@ export default function UsersPage() {
     }
     setSaving(true);
     try {
-      // Create auth user
-      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-        email: form.email,
-        password: form.password,
-        email_confirm: true,
+      const res = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: form.email,
+          password: form.password,
+          full_name: form.full_name,
+          role: form.role,
+          org_id: orgId,
+          requester_id: currentUserId,
+        }),
       });
-      if (authError) throw authError;
-
-      // Create user profile
-      const { error: profileError } = await supabase.from('users').insert({
-        id: authData.user.id,
-        org_id: orgId,
-        full_name: form.full_name,
-        role: form.role,
-      });
-      if (profileError) throw profileError;
-
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to create user');
       showToast(`${form.full_name} added as ${ROLE_INFO[form.role].label}!`);
       setShowForm(false);
       setForm({ email: '', full_name: '', password: '', role: 'manager' });
       loadUsers(orgId);
     } catch (err: unknown) {
       const error = err as Error;
-      // Fallback — insert without admin API
-      showToast(`Note: User profile created. They must sign up at app.npodesk.co.za with ${form.email}`, 'info' as 'error');
-      await supabase.from('users').upsert({
-        org_id: orgId,
-        full_name: form.full_name,
-        role: form.role,
-      });
-      loadUsers(orgId);
+      showToast(`Failed: ${error.message}`, 'error');
     }
     setSaving(false);
   };
@@ -122,12 +112,21 @@ export default function UsersPage() {
   const handleRemoveUser = async (user: OrgUser) => {
     if (user.id === currentUserId) { showToast('Cannot remove your own account', 'error'); return; }
     if (!confirm(`Remove ${user.full_name}? They will lose access immediately.`)) return;
-    const { error } = await supabase.from('users').delete().eq('id', user.id);
-    if (!error) {
+    try {
+      const res = await fetch('/api/users', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: user.id, requester_id: currentUserId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to remove user');
       showToast(`${user.full_name} removed`);
       setSel(null);
       loadUsers(orgId);
-    } else showToast('Failed to remove user', 'error');
+    } catch (err: unknown) {
+      const error = err as Error;
+      showToast(`Failed: ${error.message}`, 'error');
+    }
   };
 
   const roleOptions: UserRole[] = ['super_admin', 'admin', 'manager', 'caregiver', 'volunteer'];

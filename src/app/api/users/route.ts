@@ -21,8 +21,9 @@ export async function POST(req: Request) {
       .eq('id', requester_id)
       .single();
 
-    if (reqError || !requester || requester.role !== 'super_admin') {
-      return NextResponse.json({ error: 'Only Super Admins can create users' }, { status: 403 });
+    const allowedRoles = ['super_admin', 'admin'];
+    if (reqError || !requester || !allowedRoles.includes(requester.role)) {
+      return NextResponse.json({ error: 'Only Admins can create users' }, { status: 403 });
     }
 
     // Create the auth user
@@ -68,8 +69,9 @@ export async function DELETE(req: Request) {
       .eq('id', requester_id)
       .single();
 
-    if (!requester || requester.role !== 'super_admin') {
-      return NextResponse.json({ error: 'Only Super Admins can remove users' }, { status: 403 });
+    const allowedRoles2 = ['super_admin', 'admin'];
+    if (!requester || !allowedRoles2.includes(requester.role)) {
+      return NextResponse.json({ error: 'Only Admins can remove users' }, { status: 403 });
     }
 
     // Delete from users table first
