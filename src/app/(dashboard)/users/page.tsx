@@ -21,6 +21,21 @@ const RolePill = ({ role }: { role: string }) => {
 
 const ini = (n: string) => n.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
 
+const NAV_MODULES = [
+  { route: '/dashboard', label: 'Dashboard', icon: '📊' },
+  { route: '/beneficiaries', label: 'Beneficiaries', icon: '👥' },
+  { route: '/caregivers', label: 'Caregivers', icon: '🩺' },
+  { route: '/volunteers', label: 'Volunteers', icon: '🤝' },
+  { route: '/donors', label: 'Donors', icon: '💰' },
+  { route: '/meal-programs', label: 'Meal programs', icon: '🍲' },
+  { route: '/documents', label: 'Documents', icon: '📁' },
+  { route: '/reports', label: 'Reports', icon: '📋' },
+  { route: '/funding-agent', label: 'Funding Agent', icon: '💸' },
+  { route: '/audit-log', label: 'Audit log', icon: '🔍' },
+  { route: '/settings', label: 'Settings & POPIA', icon: '🛡️' },
+  { route: '/users', label: 'User management', icon: '👤' },
+];
+
 export default function UsersPage() {
   const [users, setUsers] = useState<OrgUser[]>([]);
   const [loading, setLoading] = useState(true);
@@ -31,7 +46,6 @@ export default function UsersPage() {
   const [currentRole, setCurrentRole] = useState<UserRole>('admin');
   const [showForm, setShowForm] = useState(false);
   const [sel, setSel] = useState<OrgUser | null>(null);
-  const [editingRole, setEditingRole] = useState<string | null>(null);
 
   const [form, setForm] = useState({
     email: '', full_name: '', password: '', role: 'manager' as UserRole,
@@ -43,7 +57,11 @@ export default function UsersPage() {
 
   const loadUsers = useCallback(async (oid: string) => {
     setLoading(true);
-    const { data } = await supabase.from('users').select('*').eq('org_id', oid).order('full_name');
+    const { data } = await supabase
+      .from('users')
+      .select('*')
+      .eq('org_id', oid)
+      .order('full_name');
     if (data) setUsers(data);
     setLoading(false);
   }, []);
@@ -52,7 +70,8 @@ export default function UsersPage() {
     supabase.auth.getSession().then(async ({ data }) => {
       if (!data.session) return;
       setCurrentUserId(data.session.user.id);
-      const { data: userData } = await supabase.from('users').select('org_id, role').eq('id', data.session.user.id).single();
+      const { data: userData } = await supabase
+        .from('users').select('org_id, role').eq('id', data.session.user.id).single();
       if (userData?.org_id) {
         setOrgId(userData.org_id);
         setCurrentRole(userData.role as UserRole || 'admin');
@@ -64,7 +83,7 @@ export default function UsersPage() {
   const handleAddUser = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.email.trim() || !form.full_name.trim() || !form.password.trim()) {
-      showToast('Please fill in all fields', 'error'); return;
+      showToast('Please fill in all required fields', 'error'); return;
     }
     if (form.password.length < 8) {
       showToast('Password must be at least 8 characters', 'error'); return;
@@ -75,17 +94,17 @@ export default function UsersPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: form.email,
+          email: form.email.trim(),
           password: form.password,
-          full_name: form.full_name,
+          full_name: form.full_name.trim(),
           role: form.role,
           org_id: orgId,
           requester_id: currentUserId,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to create user');
-      showToast(`${form.full_name} added as ${ROLE_INFO[form.role].label}!`);
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || 'Failed to create user');
+      showToast(`✅ ${form.full_name} added as ${ROLE_INFO[form.role].label}! They can now login at app.npodesk.co.za`);
       setShowForm(false);
       setForm({ email: '', full_name: '', password: '', role: 'manager' });
       loadUsers(orgId);
@@ -97,20 +116,22 @@ export default function UsersPage() {
   };
 
   const handleUpdateRole = async (userId: string, newRole: UserRole) => {
-    if (userId === currentUserId && (currentRole === 'admin' || currentRole === 'super_admin') && newRole !== 'admin' && newRole !== 'super_admin') {
-      showToast('Cannot demote yourself from admin role', 'error'); return;
+    if (userId === currentUserId) {
+      showToast('You cannot change your own role', 'error'); return;
     }
-    const { error } = await supabase.from('users').update({ role: newRole }).eq('id', userId);
+    const { error } = await supabase
+      .from('users').update({ role: newRole }).eq('id', userId);
     if (!error) {
       showToast(`Role updated to ${ROLE_INFO[newRole].label}!`);
-      setEditingRole(null);
       loadUsers(orgId);
       if (sel?.id === userId) setSel({ ...sel, role: newRole });
-    } else showToast('Failed to update role', 'error');
+    } else {
+      showToast('Failed to update role', 'error');
+    }
   };
 
   const handleRemoveUser = async (user: OrgUser) => {
-    if (user.id === currentUserId) { showToast('Cannot remove your own account', 'error'); return; }
+    if (user.id === currentUserId) { showToast('You cannot remove your own account', 'error'); return; }
     if (!confirm(`Remove ${user.full_name}? They will lose access immediately.`)) return;
     try {
       const res = await fetch('/api/users', {
@@ -118,9 +139,9 @@ export default function UsersPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_id: user.id, requester_id: currentUserId }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to remove user');
-      showToast(`${user.full_name} removed`);
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || 'Failed to remove user');
+      showToast(`${user.full_name} removed successfully`);
       setSel(null);
       loadUsers(orgId);
     } catch (err: unknown) {
@@ -133,13 +154,18 @@ export default function UsersPage() {
 
   return (
     <>
-      {toast && <Toast msg={toast.msg} type={toast.type as 'success' | 'error'} />}
+      {toast && <Toast msg={toast.msg} type={toast.type} />}
       <div className="topbar">
         <div>
           <div className="page-title">👤 User management</div>
-          <div className="page-sub">Manage team members and their access roles</div>
+          <div className="page-sub">Add team members and assign their access roles</div>
         </div>
-        <span className="live-badge">● Live</span>
+        <div className="flex-gap">
+          <span className="live-badge">● Live</span>
+          <button className="btn btn-primary btn-sm" onClick={() => { setShowForm(!showForm); setSel(null); }}>
+            {showForm ? '✕ Cancel' : '+ Add team member'}
+          </button>
+        </div>
       </div>
 
       {/* Role legend */}
@@ -147,7 +173,7 @@ export default function UsersPage() {
         {roleOptions.map(role => {
           const info = ROLE_INFO[role];
           return (
-            <div key={role} style={{ background: '#fff', border: `0.5px solid ${info.bg}`, borderRadius: 10, padding: '10px 12px' }}>
+            <div key={role} style={{ background: '#fff', border: `1.5px solid ${info.bg}`, borderRadius: 10, padding: '10px 12px' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                 <span style={{ width: 8, height: 8, borderRadius: '50%', background: info.colour, flexShrink: 0, display: 'block' }} />
                 <span style={{ fontSize: 12, fontWeight: 600, color: info.colour }}>{info.label}</span>
@@ -158,17 +184,11 @@ export default function UsersPage() {
         })}
       </div>
 
-      <div className="flex-between" style={{ marginBottom: 12 }}>
-        <span className="section-title">Team members ({users.length})</span>
-        <button className="btn btn-primary btn-sm" onClick={() => setShowForm(!showForm)}>
-          {showForm ? '✕ Cancel' : '+ Add team member'}
-        </button>
-      </div>
-
       {/* Add user form */}
       {showForm && (
         <div className="card" style={{ marginBottom: 16, border: '1.5px solid #D85A30' }}>
-          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 14, color: '#D85A30' }}>👤 Add new team member</div>
+          <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 4, color: '#D85A30' }}>👤 Add new team member</div>
+          <div style={{ fontSize: 12, color: '#888', marginBottom: 16 }}>They will be able to login at <strong>app.npodesk.co.za</strong> with the email and password you set below.</div>
           <form onSubmit={handleAddUser}>
             <div className="form-row">
               <div className="form-group">
@@ -183,7 +203,10 @@ export default function UsersPage() {
             <div className="form-row">
               <div className="form-group">
                 <label className="form-label">Password *</label>
-                <input className="form-input" type="password" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} placeholder="Min 8 characters" required />
+                <input className="form-input" type="password" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} placeholder="Min 8 chars, include uppercase + number" required />
+                {form.password.length > 0 && form.password.length < 8 && (
+                  <div style={{ fontSize: 11, color: '#f04040', marginTop: 4 }}>⚠️ Password must be at least 8 characters</div>
+                )}
               </div>
               <div className="form-group">
                 <label className="form-label">Role *</label>
@@ -195,29 +218,18 @@ export default function UsersPage() {
               </div>
             </div>
 
-            {/* Role access preview */}
-            <div style={{ background: '#FAFAF8', borderRadius: 8, padding: '10px 14px', marginBottom: 12 }}>
-              <div style={{ fontSize: 11, fontWeight: 500, color: '#555', marginBottom: 6 }}>
-                {ROLE_INFO[form.role].label} will have access to:
+            {/* Live access preview */}
+            <div style={{ background: '#FAFAF8', borderRadius: 8, padding: '12px 14px', marginBottom: 14, border: '0.5px solid rgba(0,0,0,0.07)' }}>
+              <div style={{ fontSize: 12, fontWeight: 500, color: '#555', marginBottom: 8 }}>
+                <span style={{ background: ROLE_INFO[form.role].bg, color: ROLE_INFO[form.role].colour, padding: '2px 10px', borderRadius: 99, fontWeight: 600, marginRight: 6 }}>{ROLE_INFO[form.role].label}</span>
+                will have access to:
               </div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {[
-                  { route: '/dashboard', label: 'Dashboard', icon: '📊' },
-                  { route: '/beneficiaries', label: 'Beneficiaries', icon: '👥' },
-                  { route: '/caregivers', label: 'Caregivers', icon: '🩺' },
-                  { route: '/volunteers', label: 'Volunteers', icon: '🤝' },
-                  { route: '/donors', label: 'Donors', icon: '💰' },
-                  { route: '/meal-programs', label: 'Meals', icon: '🍲' },
-                  { route: '/documents', label: 'Documents', icon: '📁' },
-                  { route: '/reports', label: 'Reports', icon: '📋' },
-                  { route: '/settings', label: 'Settings', icon: '🛡️' },
-                  { route: '/users', label: 'Users', icon: '👤' },
-                ].map(({ route, label, icon }) => {
-                  const { canAccessRoute } = require('@/lib/rbac');
+                {NAV_MODULES.map(({ route, label, icon }) => {
                   const hasAccess = canAccessRoute(form.role, route);
                   return (
-                    <span key={route} style={{ fontSize: 10, padding: '3px 8px', borderRadius: 99, background: hasAccess ? '#EAF3DE' : '#F0EDE8', color: hasAccess ? '#27500A' : '#aaa', border: `0.5px solid ${hasAccess ? '#b0d890' : '#e0ddd8'}` }}>
-                      {icon} {label}
+                    <span key={route} style={{ fontSize: 11, padding: '4px 10px', borderRadius: 99, background: hasAccess ? '#EAF3DE' : '#F5F3F0', color: hasAccess ? '#27500A' : '#ccc', border: `0.5px solid ${hasAccess ? '#b0d890' : '#e8e4e0'}`, display: 'flex', alignItems: 'center', gap: 4 }}>
+                      {icon} {label} {hasAccess ? '✓' : ''}
                     </span>
                   );
                 })}
@@ -227,7 +239,7 @@ export default function UsersPage() {
             <div className="flex-gap">
               <button type="button" className="btn" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setShowForm(false)}>Cancel</button>
               <button type="submit" className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }} disabled={saving}>
-                {saving ? '⏳ Adding...' : '💾 Add team member'}
+                {saving ? '⏳ Creating account...' : '💾 Create account & assign role'}
               </button>
             </div>
           </form>
@@ -235,17 +247,22 @@ export default function UsersPage() {
       )}
 
       <div className="two-col">
+        {/* Team members table */}
         <div className="table-wrap">
           {loading ? (
             <div style={{ padding: '2rem', textAlign: 'center', color: '#888' }}>⏳ Loading team members...</div>
           ) : users.length === 0 ? (
-            <div style={{ padding: '2rem', textAlign: 'center', color: '#888' }}>👤 No team members yet</div>
+            <div style={{ padding: '3rem', textAlign: 'center', color: '#aaa' }}>
+              <div style={{ fontSize: 36, marginBottom: 12 }}>👥</div>
+              <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 6 }}>No team members yet</div>
+              <div style={{ fontSize: 12 }}>Click "+ Add team member" to add a caregiver, manager or volunteer</div>
+            </div>
           ) : (
             <table>
               <thead><tr>
-                <th style={{ width: '30%' }}>Name</th>
+                <th style={{ width: '32%' }}>Name</th>
                 <th style={{ width: '22%' }}>Role</th>
-                <th style={{ width: '30%' }}>Access</th>
+                <th style={{ width: '28%' }}>Key access</th>
                 <th style={{ width: '18%' }}>Actions</th>
               </tr></thead>
               <tbody>
@@ -253,35 +270,19 @@ export default function UsersPage() {
                   const info = ROLE_INFO[u.role] || ROLE_INFO.volunteer;
                   const isCurrentUser = u.id === currentUserId;
                   return (
-                    <tr key={u.id} className={sel?.id === u.id ? 'selected' : ''} onClick={() => setSel(u)}>
+                    <tr key={u.id} className={sel?.id === u.id ? 'selected' : ''} onClick={() => { setSel(u); setShowForm(false); }}>
                       <td>
                         <div className="name-cell">
                           <div className="av" style={{ background: info.bg, color: info.colour }}>{ini(u.full_name)}</div>
                           <div>
                             <div style={{ fontSize: 12, fontWeight: 500 }}>{u.full_name}</div>
-                            {isCurrentUser && <div style={{ fontSize: 10, color: '#D85A30' }}>You</div>}
+                            <div style={{ fontSize: 10, color: isCurrentUser ? '#D85A30' : '#aaa' }}>
+                              {isCurrentUser ? '● You' : u.email || 'Team member'}
+                            </div>
                           </div>
                         </div>
                       </td>
-                      <td>
-                        {editingRole === u.id ? (
-                          <select className="form-input" style={{ fontSize: 11, padding: '4px 8px', height: 28 }}
-                            defaultValue={u.role}
-                            onChange={e => handleUpdateRole(u.id, e.target.value as UserRole)}
-                            onBlur={() => setEditingRole(null)}
-                            autoFocus>
-                            {roleOptions.map(r => <option key={r} value={r}>{ROLE_INFO[r].label}</option>)}
-                          </select>
-                        ) : (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <RolePill role={u.role} />
-                            {!isCurrentUser && (
-                              <button onClick={e => { e.stopPropagation(); setEditingRole(u.id); }}
-                                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#aaa' }} title="Change role">✏️</button>
-                            )}
-                          </div>
-                        )}
-                      </td>
+                      <td><RolePill role={u.role} /></td>
                       <td>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
                           {[
@@ -290,9 +291,8 @@ export default function UsersPage() {
                             { route: '/reports', label: 'Reports' },
                             { route: '/settings', label: 'Settings' },
                           ].map(({ route, label }) => {
-                            const has = canAccessRoute(u.role, route);
-                            if (!has) return null;
-                            return <span key={route} style={{ fontSize: 9, padding: '2px 6px', borderRadius: 99, background: '#EAF3DE', color: '#27500A' }}>{label}</span>;
+                            if (!canAccessRoute(u.role, route)) return null;
+                            return <span key={route} style={{ fontSize: 9, padding: '2px 7px', borderRadius: 99, background: '#EAF3DE', color: '#27500A', border: '0.5px solid #b0d890' }}>{label}</span>;
                           })}
                         </div>
                       </td>
@@ -312,61 +312,61 @@ export default function UsersPage() {
           )}
         </div>
 
+        {/* Detail / edit panel */}
         {sel ? (
           <div className="card">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, paddingBottom: 12, marginBottom: 12, borderBottom: '0.5px solid rgba(0,0,0,0.07)' }}>
-              <div style={{ width: 44, height: 44, borderRadius: '50%', background: ROLE_INFO[sel.role]?.bg || '#FAEEDA', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600, fontSize: 14, color: ROLE_INFO[sel.role]?.colour || '#633806' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, paddingBottom: 14, marginBottom: 14, borderBottom: '0.5px solid rgba(0,0,0,0.07)' }}>
+              <div style={{ width: 48, height: 48, borderRadius: '50%', background: ROLE_INFO[sel.role]?.bg || '#FAEEDA', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 16, color: ROLE_INFO[sel.role]?.colour || '#633806', flexShrink: 0 }}>
                 {ini(sel.full_name)}
               </div>
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 500 }}>{sel.full_name}</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 15, fontWeight: 600 }}>{sel.full_name}</div>
                 <RolePill role={sel.role} />
               </div>
+              {sel.id !== currentUserId && (
+                <button className="btn btn-sm" style={{ color: '#791F1F', fontSize: 11 }}
+                  onClick={() => handleRemoveUser(sel)}>🗑 Remove</button>
+              )}
             </div>
 
-            {/* Access list */}
-            <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 10 }}>Access permissions</div>
-            {[
-              { route: '/dashboard', label: 'Dashboard', icon: '📊' },
-              { route: '/beneficiaries', label: 'Beneficiaries', icon: '👥' },
-              { route: '/caregivers', label: 'Caregivers', icon: '🩺' },
-              { route: '/volunteers', label: 'Volunteers', icon: '🤝' },
-              { route: '/donors', label: 'Donors', icon: '💰' },
-              { route: '/meal-programs', label: 'Meal programs', icon: '🍲' },
-              { route: '/documents', label: 'Documents', icon: '📁' },
-              { route: '/reports', label: 'Reports', icon: '📋' },
-              { route: '/funding-agent', label: 'Funding Agent', icon: '💸' },
-              { route: '/audit-log', label: 'Audit log', icon: '🔍' },
-              { route: '/settings', label: 'Settings', icon: '🛡️' },
-              { route: '/users', label: 'User management', icon: '👤' },
-            ].map(({ route, label, icon }) => {
-              const hasAccess = canAccessRoute(sel.role, route);
-              return (
-                <div key={route} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 0', borderBottom: '0.5px solid rgba(0,0,0,0.04)' }}>
-                  <span style={{ fontSize: 14, width: 20 }}>{icon}</span>
-                  <span style={{ flex: 1, fontSize: 12, color: hasAccess ? '#1a1a1a' : '#ccc' }}>{label}</span>
-                  <span style={{ fontSize: 11, color: hasAccess ? '#27500A' : '#ccc' }}>{hasAccess ? '✅' : '—'}</span>
-                </div>
-              );
-            })}
+            {/* Change role */}
+            {sel.id !== currentUserId && (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 6 }}>Change role</div>
+                <select className="form-input" value={sel.role}
+                  onChange={e => handleUpdateRole(sel.id, e.target.value as UserRole)}>
+                  {roleOptions.map(r => (
+                    <option key={r} value={r}>{ROLE_INFO[r].label} — {ROLE_INFO[r].description}</option>
+                  ))}
+                </select>
+              </div>
+            )}
 
-            <div className="flex-gap" style={{ marginTop: 14 }}>
-              <select className="form-input" style={{ flex: 1, fontSize: 12 }}
-                value={sel.role}
-                onChange={e => handleUpdateRole(sel.id, e.target.value as UserRole)}
-                disabled={sel.id === currentUserId}>
-                {roleOptions.map(r => <option key={r} value={r}>{ROLE_INFO[r].label}</option>)}
-              </select>
-              {sel.id !== currentUserId && (
-                <button className="btn btn-sm" style={{ color: '#791F1F' }} onClick={() => handleRemoveUser(sel)}>🗑</button>
-              )}
+            {/* Access permissions */}
+            <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 8 }}>Access permissions for {sel.full_name.split(' ')[0]}</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {NAV_MODULES.map(({ route, label, icon }) => {
+                const hasAccess = canAccessRoute(sel.role, route);
+                return (
+                  <div key={route} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', borderRadius: 6, background: hasAccess ? '#F5FBF0' : '#FAFAF8' }}>
+                    <span style={{ fontSize: 14, width: 22, textAlign: 'center' }}>{icon}</span>
+                    <span style={{ flex: 1, fontSize: 12, color: hasAccess ? '#1a1a1a' : '#ccc' }}>{label}</span>
+                    <span style={{ fontSize: 13 }}>{hasAccess ? '✅' : '—'}</span>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div style={{ marginTop: 14, background: '#E6F1FB', borderRadius: 8, padding: '10px 12px', fontSize: 11, color: '#0C447C', lineHeight: 1.6 }}>
+              ℹ️ Role changes take effect immediately. The user will see their new permissions on their next page load.
             </div>
           </div>
         ) : (
-          <div className="card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 250 }}>
+          <div className="card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 300 }}>
             <div style={{ textAlign: 'center', color: '#aaa' }}>
-              <div style={{ fontSize: 32, marginBottom: 8 }}>👆</div>
-              <div style={{ fontSize: 13 }}>Click a team member to view their permissions</div>
+              <div style={{ fontSize: 40, marginBottom: 12 }}>👆</div>
+              <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 6 }}>Click any team member</div>
+              <div style={{ fontSize: 12 }}>View permissions and change their role</div>
             </div>
           </div>
         )}
