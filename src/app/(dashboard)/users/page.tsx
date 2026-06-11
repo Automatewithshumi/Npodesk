@@ -94,7 +94,7 @@ export default function UsersPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: form.email.trim(),
+          email: form.email.trim().toLowerCase(),
           password: form.password,
           full_name: form.full_name.trim(),
           role: form.role,
@@ -103,14 +103,18 @@ export default function UsersPage() {
         }),
       });
       const result = await res.json();
-      if (!res.ok) throw new Error(result.error || 'Failed to create user');
+      if (!res.ok) {
+        showToast(`❌ ${result.error || 'Failed to create user'}`, 'error');
+        setSaving(false);
+        return;
+      }
       showToast(`✅ ${form.full_name} added as ${ROLE_INFO[form.role].label}! They can now login at app.npodesk.co.za`);
       setShowForm(false);
       setForm({ email: '', full_name: '', password: '', role: 'manager' });
-      loadUsers(orgId);
+      await loadUsers(orgId);
     } catch (err: unknown) {
       const error = err as Error;
-      showToast(`Failed: ${error.message}`, 'error');
+      showToast(`❌ ${error.message}`, 'error');
     }
     setSaving(false);
   };
@@ -162,6 +166,13 @@ export default function UsersPage() {
         </div>
         <div className="flex-gap">
           <span className="live-badge">● Live</span>
+          <button className="btn btn-sm" onClick={async () => {
+            // Find auth users not linked to this org and fix them
+            const res = await fetch(`/api/users?org_id=${orgId}&requester_id=${currentUserId}`);
+            const data = await res.json();
+            showToast(`Found ${data.users?.length || 0} users in your organisation`);
+            if (data.users) loadUsers(orgId);
+          }} title="Refresh user list">🔄 Refresh</button>
           <button className="btn btn-primary btn-sm" onClick={() => { setShowForm(!showForm); setSel(null); }}>
             {showForm ? '✕ Cancel' : '+ Add team member'}
           </button>

@@ -3,58 +3,96 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-// Lazy initialization - only created when API is called, not at build time
-const getSupabaseAdmin = () => createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-  process.env.SUPABASE_SERVICE_ROLE_KEY || '',
-  { auth: { autoRefreshToken: false, persistSession: false } }
-);
+const getAdminClient = () => {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+  if (!url || !key) throw new Error('Missing Supabase environment variables');
+  return createClient(url, key, {
+    auth: { autoRefreshToken: false, persistSession: false }
+  });
+};
 
 export async function POST(req: Request) {
   try {
-    const { email, full_name, password, role, org_id, requester_id } = await req.json();
+    const body = await req.json();
+    const { email, full_name, password, role, org_id, requester_id } = body;
 
-    // Verify the requester is a super_admin
-    const { data: requester, error: reqError } = await getSupabaseAdmin()
+    // Validate inputs
+    if (!email || !full_name || !password || !role || !org_id || !requester_id) {
+      return NextResponse.json({ error: 'All fields are required' }, { status: 400 });
+    }
+
+    const admin = getAdminClient();
+
+    // Verify requester exists and is admin/super_admin
+    const { data: requester, error: reqError } = await admin
       .from('users')
-      .select('role')
+      .select('role, org_id')
       .eq('id', requester_id)
       .single();
 
-    const allowedRoles = ['super_admin', 'admin'];
-    if (reqError || !requester || !allowedRoles.includes(requester.role)) {
-      return NextResponse.json({ error: 'Only Admins can create users' }, { status: 403 });
+    if (reqError || !requester) {
+      return NextResponse.json({ error: 'Could not verify your permissions' }, { status: 403 });
     }
 
-    // Create the auth user
-    const { data: authData, error: authError } = await getSupabaseAdmin().auth.admin.createUser({
-      email,
+    if (!['super_admin', 'admin'].includes(requester.role)) {
+      return NextResponse.json({ error: 'Only admins can create users' }, { status: 403 });
+    }
+
+    // Step 1: Create auth user
+    const { data: authData, error: authError } = await admin.auth.admin.createUser({
+      email: email.trim().toLowerCase(),
       password,
-      email_confirm: true,
+      email_confirm: true, // Auto-confirm so they can login immediately
+      user_metadata: { full_name }
     });
 
     if (authError) {
       return NextResponse.json({ error: authError.message }, { status: 400 });
     }
 
-    // Insert into users table
-    const { error: profileError } = await getSupabaseAdmin().from('users').insert({
-      id: authData.user.id,
-      org_id,
-      full_name,
-      role,
-    });
+    const newUserId = authData.user.id;
 
-    if (profileError) {
-      // Rollback: delete the auth user if profile insert fails
-      await getSupabaseAdmin().auth.admin.deleteUser(authData.user.id);
-      return NextResponse.json({ error: profileError.message }, { status: 400 });
+    // Step 2: Check if a users table row already exists for this ID
+    const { data: existing } = await admin
+      .from('users')
+      .select('id')
+      .eq('id', newUserId)
+      .single();
+
+    if (existing) {
+      // Update existing row
+      await admin.from('users').update({
+        org_id,
+        full_name,
+        role,
+      }).eq('id', newUserId);
+    } else {
+      // Insert new row
+      const { error: profileError } = await admin.from('users').insert({
+        id: newUserId,
+        org_id,
+        full_name,
+        role,
+      });
+
+      if (profileError) {
+        // Rollback auth user
+        await admin.auth.admin.deleteUser(newUserId);
+        return NextResponse.json({ error: `Profile error: ${profileError.message}` }, { status: 400 });
+      }
     }
 
-    return NextResponse.json({ success: true, userId: authData.user.id });
-  } catch (err) {
-    console.error('Create user error:', err);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({
+      success: true,
+      userId: newUserId,
+      message: `${full_name} created successfully`
+    });
+
+  } catch (err: unknown) {
+    const error = err as Error;
+    console.error('Create user error:', error);
+    return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 });
   }
 }
 
@@ -62,26 +100,76 @@ export async function DELETE(req: Request) {
   try {
     const { user_id, requester_id } = await req.json();
 
-    // Verify requester is super_admin
-    const { data: requester } = await getSupabaseAdmin()
+    if (!user_id || !requester_id) {
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+    }
+
+    const admin = getAdminClient();
+
+    // Verify requester
+    const { data: requester } = await admin
       .from('users')
       .select('role')
       .eq('id', requester_id)
       .single();
 
-    const allowedRoles2 = ['super_admin', 'admin'];
-    if (!requester || !allowedRoles2.includes(requester.role)) {
-      return NextResponse.json({ error: 'Only Admins can remove users' }, { status: 403 });
+    if (!requester || !['super_admin', 'admin'].includes(requester.role)) {
+      return NextResponse.json({ error: 'Only admins can remove users' }, { status: 403 });
     }
 
-    // Delete from users table first
-    await getSupabaseAdmin().from('users').delete().eq('id', user_id);
+    // Delete profile first
+    await admin.from('users').delete().eq('id', user_id);
+
     // Delete auth user
-    await getSupabaseAdmin().auth.admin.deleteUser(user_id);
+    const { error: deleteError } = await admin.auth.admin.deleteUser(user_id);
+    if (deleteError) {
+      console.error('Auth delete error:', deleteError);
+      // Profile already deleted — still return success
+    }
 
     return NextResponse.json({ success: true });
-  } catch (err) {
-    console.error('Delete user error:', err);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+
+  } catch (err: unknown) {
+    const error = err as Error;
+    console.error('Delete user error:', error);
+    return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 });
+  }
+}
+
+// GET endpoint to fix existing users with wrong/missing org_id
+export async function GET(req: Request) {
+  try {
+    const url = new URL(req.url);
+    const org_id = url.searchParams.get('org_id');
+    const requester_id = url.searchParams.get('requester_id');
+
+    if (!org_id || !requester_id) {
+      return NextResponse.json({ error: 'Missing params' }, { status: 400 });
+    }
+
+    const admin = getAdminClient();
+
+    // Verify requester
+    const { data: requester } = await admin
+      .from('users')
+      .select('role')
+      .eq('id', requester_id)
+      .single();
+
+    if (!requester || !['super_admin', 'admin'].includes(requester.role)) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
+    }
+
+    // Get all users for this org
+    const { data: users, error } = await admin
+      .from('users')
+      .select('*')
+      .eq('org_id', org_id);
+
+    return NextResponse.json({ users, error });
+
+  } catch (err: unknown) {
+    const error = err as Error;
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
