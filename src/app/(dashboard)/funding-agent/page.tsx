@@ -263,20 +263,45 @@ export default function FundingAgentPage() {
     });
   }, []);
 
-  const searchFunding = () => {
+  const searchFunding = async () => {
     setLoading(true);
     setSelectedFunder(null);
-    // Simulate a brief search animation
-    setTimeout(() => {
-      const matched = ALL_FUNDERS.filter(f =>
-        f.category.includes(searchType)
-      );
-      setResults(matched);
-      setSearched(true);
-      setLastSearched(new Date().toLocaleString('en-ZA'));
-      setLoading(false);
-      showToast(`Found ${matched.length} verified funding opportunities for ${orgName}!`);
-    }, 1800);
+
+    // Step 1 - always show verified database results immediately
+    const matched = ALL_FUNDERS.filter(f => f.category.includes(searchType));
+    setResults(matched);
+    setSearched(true);
+    setLastSearched(new Date().toLocaleString('en-ZA'));
+    showToast(`Found ${matched.length} verified funding opportunities for ${orgName}!`);
+
+    // Step 2 - try to fetch live, up-to-date opportunities in the background
+    try {
+      const res = await fetch('/api/funding', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orgName, orgCity, searchType }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const live: Funder[] = (data.funders || []).map((f: Partial<Funder>) => ({
+          ...f,
+          category: searchType,
+          logo: f.logo || '🆕',
+        } as Funder));
+        if (live.length > 0) {
+          setResults(prev => {
+            const existingNames = new Set(prev.map(p => p.name.toLowerCase()));
+            const newOnes = live.filter(l => l.name && !existingNames.has(l.name.toLowerCase()));
+            return [...newOnes, ...prev];
+          });
+          showToast(`+${live.length} new opportunit${live.length > 1 ? 'ies' : 'y'} found from live search!`);
+        }
+      }
+    } catch {
+      // Silent fail - verified database results already shown
+    }
+
+    setLoading(false);
   };
 
   const saveFunder = (name: string) => {
@@ -367,7 +392,7 @@ export default function FundingAgentPage() {
           </div>
         </div>
         <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', padding: '12px', fontSize: 14 }} onClick={searchFunding} disabled={loading}>
-          {loading ? '⏳ Finding verified funders...' : '💰 Find funding opportunities now'}
+          {loading ? '⏳ Searching for the latest opportunities...' : searched ? '🔄 Search again for new opportunities' : '💰 Find funding opportunities now'}
         </button>
       </div>
 
@@ -429,6 +454,7 @@ export default function FundingAgentPage() {
                           <span style={{ fontSize: 13, fontWeight: 600, color: '#1a1a1a' }}>{funder.name}</span>
                           <span className="pill" style={{ background: tc.bg, color: tc.tx }}>{funder.type}</span>
                           <span className="pill" style={{ background: urg.bg, color: urg.tx, fontSize: 10 }}>{urg.label}</span>
+                          {funder.logo === '🆕' && <span style={{ fontSize: 10, background: '#FCEBEB', color: '#791F1F', padding: '2px 8px', borderRadius: 99, fontWeight: 600 }}>🆕 New</span>}
                           <span style={{ fontSize: 10, background: '#EAF3DE', color: '#27500A', padding: '2px 8px', borderRadius: 99 }}>✅ Verified</span>
                         </div>
                         <div style={{ fontSize: 12, color: '#888', marginBottom: 4 }}>{funder.focus}</div>
